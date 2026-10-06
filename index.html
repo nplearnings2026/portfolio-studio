@@ -4,11 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="data:,">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <title>Portfolio Studio</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="theme-color" content="#11231d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Portfolio">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
 :root{
   color-scheme:light;
@@ -370,7 +376,7 @@ dialog h2{font-size:20px}
   .app{display:block}
   .side{display:none}
   main{padding:18px 16px 30px}
-  .chip.date{display:none}
+  .topline [data-feed-chip]{display:none}
   .ledger{padding:22px 20px;border-radius:18px;gap:24px}
   .ledger::after{width:150px;height:150px;border-width:28px;right:-95px;top:-90px}
   .big{font-size:36px}
@@ -460,23 +466,17 @@ function defaultFeed() {
 }
 
 function seed() {
-  // Quantities and purchase prices come from Nil's holdings list; prices are the Oct 3, 2026 snapshot. Every other account is a sample value.
-  var snap = Date.parse('2026-10-03T16:05:00-05:00');
+  // Made-up sample data so the page has something to show before you add your own.
+  var snap = Date.parse('2026-10-01T16:00:00-04:00');
   var raw = [
-    ['MSFT', 'Microsoft Corp.', 'Stock', 142.62, 517.53],
-    ['AAPL', 'Apple Inc.', 'Stock', 148.42, 333.69],
-    ['GOOG', 'Alphabet Inc. Class C', 'Stock', 138.97, 340.35],
-    ['AMZN', 'Amazon.com Inc.', 'Stock', 163.16, 251.52],
-    ['HPE', 'Hewlett Packard Enterprise', 'Stock', 14.49, 69.33],
-    ['PLTR', 'Palantir Technologies Inc. Class A', 'Stock', 67.75, 188.75],
-    ['NVDA', 'NVIDIA Corp.', 'Stock', 121.96, 233.95],
-    ['SPCX', 'SpaceX (Space Exploration Tech) Class A', 'Private', 185.00, null],
-    ['LUV', 'Southwest Airlines Co.', 'Stock', 37.00, 42.47],
-    ['WMT', 'Walmart Inc.', 'Stock', 68.96, 104.26],
-    ['TSLA', 'Tesla Inc.', 'Stock', 164.79, 370.59],
-    ['AMD', 'Advanced Micro Devices Inc.', 'Stock', 111.96, 633.91],
-    ['VTI', 'Vanguard Total Stock Market ETF', 'ETF', 376.31, 377.99],
-    ['FSPTX', 'Fidelity Select Technology Portfolio', 'Mutual Fund', 39.11, 58.86]
+    ['VTI', 'Vanguard Total Stock Market ETF', 'ETF', 40, 210.00, 330.00],
+    ['VXUS', 'Vanguard Total International Stock ETF', 'ETF', 80, 55.00, 68.00],
+    ['BND', 'Vanguard Total Bond Market ETF', 'ETF', 50, 72.00, 74.00],
+    ['AAPL', 'Apple Inc.', 'Stock', 25, 150.00, 330.00],
+    ['MSFT', 'Microsoft Corp.', 'Stock', 15, 280.00, 515.00],
+    ['KO', 'Coca-Cola Co.', 'Stock', 30, 58.00, 70.00],
+    ['FXAIX', 'Fidelity 500 Index Fund', 'Mutual Fund', 20, 150.00, 225.00],
+    ['PRIV', 'Example private company shares', 'Private', 100, 12.00, null]
   ];
   return {
     meta: { sample: true, savedAt: 0 },
@@ -484,8 +484,8 @@ function seed() {
     feed: defaultFeed(),
     history: [],
     stocks: raw.map(function (r) {
-      return { id: uid(), ticker: r[0], symbol: '', company: r[1], type: r[2], qty: 20, cost: r[3], price: r[4],
-        manual: r[4] === null, prevClose: null, quoteTime: r[4] === null ? null : snap, quoteSource: r[4] === null ? '' : 'Snapshot', quoteError: null };
+      return { id: uid(), ticker: r[0], symbol: '', company: r[1], type: r[2], qty: r[3], cost: r[4], price: r[5],
+        manual: r[5] === null, prevClose: null, quoteTime: r[5] === null ? null : snap, quoteSource: r[5] === null ? '' : 'Sample', quoteError: null };
     }),
     k401: [{ id: uid(), name: 'Employer 401(k)', balance: 86400, contrib: 16100 }],
     cds: [
@@ -877,8 +877,6 @@ var FEEDS = {
   var prefs = loadPrefs();
   var ui = { tab: 'k401', sort: { key: 'ticker', dir: 1 }, savedAt: null, flash: {}, openYears: {} };
   var feedRun = { running: false, done: 0, total: 0, failed: 0 };
-  var link = { handle: null, status: 'none', writtenAt: null, error: '' };
-  var FS = typeof window.showSaveFilePicker === 'function';
 
   function load() {
     try {
@@ -901,8 +899,8 @@ var FEEDS = {
     recordSnapshot();
     state.meta.savedAt = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(state)); ui.savedAt = Date.now(); }
-    catch (e) { toast('Could not save in this browser. Use Export or a save file to keep a copy.'); }
-    fileSaveSoon();
+    catch (e) { toast('Could not save on this device. Use Export to keep a copy.'); }
+    cloudSaveSoon();
     paintSaveStatus();
   }
   var saveTimer;
@@ -941,111 +939,229 @@ var FEEDS = {
   }
   applyTheme();
 
-  /* ---------- save file (File System Access API, Chromium browsers) ---------- */
-  function idb(mode, fn) {
-    return new Promise(function (res, rej) {
-      var req;
-      try { req = indexedDB.open('portfolio-studio', 1); } catch (e) { rej(e); return; }
-      req.onupgradeneeded = function () { req.result.createObjectStore('kv'); };
-      req.onerror = function () { rej(req.error); };
-      req.onsuccess = function () {
-        var db = req.result, tx = db.transaction('kv', mode), r = fn(tx.objectStore('kv'));
-        tx.oncomplete = function () { db.close(); res(r && r.result); };
-        tx.onerror = function () { db.close(); rej(tx.error); };
-      };
-    });
-  }
-  function idbGet(k) { return idb('readonly', function (s) { return s.get(k); }); }
-  function idbSet(k, v) { return idb('readwrite', function (s) { return s.put(v, k); }); }
-  function idbDel(k) { return idb('readwrite', function (s) { return s.delete(k); }); }
-
-  var fileChain = Promise.resolve(), fileTimer;
-  function writeFile() {
-    if (link.status !== 'linked' || !link.handle) return Promise.resolve();
-    var h = link.handle;
-    return h.createWritable().then(function (w) {
-      return w.write(JSON.stringify(state, null, 2)).then(function () { return w.close(); });
-    }).then(function () {
-      link.writtenAt = Date.now(); link.error = ''; paintSaveStatus();
-    }, function (e) {
-      link.status = e && e.name === 'NotAllowedError' ? 'needs-permission' : 'error';
-      link.error = (e && e.message) || 'Unknown error';
-      paintSaveStatus(); softRender();
-    });
-  }
-  function queueWrite() { fileChain = fileChain.then(writeFile); return fileChain; }
-  function fileSaveSoon() { if (link.status !== 'linked') return; clearTimeout(fileTimer); fileTimer = setTimeout(queueWrite, 700); }
-  function readHandle(h) { return h.getFile().then(function (f) { return f.text(); }).then(function (t) { return t.trim() ? JSON.parse(t) : null; }); }
+  /* ---------- OneDrive sync (Microsoft Graph, app folder only) ----------
+     Sign-in uses the OAuth 2.0 authorization-code flow with PKCE for single-page apps, so there is no client secret.
+     The page can only reach its own folder, OneDrive/Apps/<app name>/. The most recent save wins, and net worth
+     history from every device is combined. Sign-in tokens and API keys stay on each device. */
+  var CLOUD = {
+    clientId: 'be35e1ab-34e9-4540-bbb0-d28a26f13dd9',
+    authority: 'https://login.microsoftonline.com/consumers/oauth2/v2.0',
+    graph: 'https://graph.microsoft.com/v1.0',
+    scope: 'Files.ReadWrite.AppFolder User.Read offline_access',
+    file: 'portfolio-data.json'
+  };
+  var AUTH_KEY = 'portfolio-studio-auth';
+  // status: off | syncing | synced | offline | signin | error
+  var cloud = { status: 'off', at: null, error: '', dirty: false, again: 0 };
   function looksValid(d) { return d && typeof d === 'object' && ORDER.some(function (k) { return Array.isArray(d[k]); }); }
-  // Whichever copy was saved more recently wins: the file (e.g. edited on another computer) or this browser.
-  function syncWithFile() {
-    return readHandle(link.handle).then(function (data) {
-      if (looksValid(data) && n(data.meta && data.meta.savedAt) > n(state.meta.savedAt)) {
-        // The file wins, but snapshot histories from both copies are combined.
-        var localHist = state.history;
-        state = normalize(data); state.meta.sample = false;
-        state.history = mergeHistory(state.history, localHist);
-        save();
-        toast('Loaded newer data from ' + link.handle.name);
-        render();
-      } else {
-        if (looksValid(data)) state.history = mergeHistory(state.history, data.history);
-        save(); softRender();
-      }
-    }).catch(function () { return queueWrite(); });
+  function cloudAvailable() { return /^https?:$/.test(location.protocol) && !!(window.crypto && crypto.subtle); }
+  function redirectUri() { return location.origin + location.pathname.replace(/index\.html$/, ''); }
+  function loadAuth() { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch (e) { return null; } }
+  function storeAuth(a) { try { if (a) localStorage.setItem(AUTH_KEY, JSON.stringify(a)); else localStorage.removeItem(AUTH_KEY); } catch (e) { /* private mode */ } }
+  function b64url(bytes) { var s = ''; for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function randomString(len) { var a = new Uint8Array(len); crypto.getRandomValues(a); return b64url(a); }
+  function signinErr() { var e = new Error('Sign in to OneDrive again.'); e.signin = true; return e; }
+
+  // Sends the page to Microsoft's sign-in. silent: only reuse an existing Microsoft session, never show a screen.
+  function signIn(silent) {
+    if (!cloudAvailable()) { toast('OneDrive sync works on the published page, not on a copy opened from disk.'); return; }
+    var verifier = randomString(48), st = randomString(16);
+    crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)).then(function (hash) {
+      try { sessionStorage.setItem('ps-pkce', JSON.stringify({ v: verifier, s: st, hash: location.hash, silent: !!silent })); } catch (e) { /* ignore */ }
+      var a = loadAuth(), q = {
+        client_id: CLOUD.clientId, response_type: 'code', redirect_uri: redirectUri(), scope: CLOUD.scope, response_mode: 'query',
+        code_challenge: b64url(new Uint8Array(hash)), code_challenge_method: 'S256', state: st, prompt: silent ? 'none' : 'select_account'
+      };
+      if (a && a.user) q.login_hint = a.user;
+      location.assign(CLOUD.authority + '/authorize?' + new URLSearchParams(q).toString());
+    });
   }
-  function initFileLink() {
-    if (!FS) return;
-    idbGet('saveHandle').then(function (h) {
-      if (!h) return;
-      link.handle = h;
-      return h.queryPermission({ mode: 'readwrite' }).then(function (p) {
-        link.status = p === 'granted' ? 'linked' : 'needs-permission';
-        paintSaveStatus(); softRender();
-        if (p === 'granted') return syncWithFile();
+  function tokenRequest(body) {
+    return fetch(CLOUD.authority + '/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(Object.assign({ client_id: CLOUD.clientId, scope: CLOUD.scope }, body)).toString()
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok || !j.access_token) { var e = new Error(j.error_description ? j.error_description.split(/\r?\n/)[0] : (j.error || 'Sign-in failed')); e.code = j.error; throw e; }
+        return j;
       });
-    }).catch(function () { /* no stored link */ });
+    });
   }
-  var FILE_TYPES = [{ description: 'Portfolio data', accept: { 'application/json': ['.json'] } }];
-  var fileActs = {
-    'file-link': function () {
-      window.showSaveFilePicker({ suggestedName: 'portfolio-data.json', types: FILE_TYPES }).then(function (h) {
-        link.handle = h; link.status = 'linked';
-        idbSet('saveHandle', h).catch(function () {});
-        state.meta.sample = false; state.meta.savedAt = Date.now();
-        return queueWrite();
-      }).then(function () {
-        if (link.status === 'linked') toast('Linked. Every change now saves to ' + link.handle.name);
-        render();
-      }).catch(function (e) { if (e && e.name !== 'AbortError') toast('Could not link that file: ' + e.message); });
-    },
-    'file-open': function () {
-      var h;
-      window.showOpenFilePicker({ types: FILE_TYPES, multiple: false }).then(function (hs) {
-        h = hs[0]; return readHandle(h);
-      }).then(function (data) {
-        if (!looksValid(data)) { toast('That file does not look like Portfolio Studio data.'); return; }
-        if (!confirm('Replace everything in this page with the contents of "' + h.name + '" and keep saving to that file?')) return;
-        state = normalize(data); state.meta.sample = false;
-        return h.requestPermission({ mode: 'readwrite' }).then(function (p) {
-          if (p === 'granted') { link.handle = h; link.status = 'linked'; idbSet('saveHandle', h).catch(function () {}); }
-          save(); render();
-          toast(p === 'granted' ? 'Opened and linked ' + h.name : 'Opened ' + h.name + ' (read only, changes stay in this browser)');
+  function keepTokens(j, prev) {
+    var now = Date.now();
+    var a = Object.assign({}, prev || {}, {
+      access: j.access_token, accessExp: now + (n(j.expires_in) || 3600) * 1000,
+      refresh: j.refresh_token || (prev && prev.refresh),
+      // Refresh tokens for single-page apps last 24 hours from sign-in; renewing them keeps that end time.
+      refreshExp: j.refresh_token_expires_in ? now + n(j.refresh_token_expires_in) * 1000 : ((prev && prev.refreshExp) || now + 24 * 3600 * 1000)
+    });
+    storeAuth(a);
+    return a;
+  }
+  function accessToken() {
+    var a = loadAuth();
+    if (!a) return Promise.reject(signinErr());
+    if (a.access && a.accessExp - 60000 > Date.now()) return Promise.resolve(a.access);
+    if (a.refresh && a.refreshExp - 60000 > Date.now()) {
+      return tokenRequest({ grant_type: 'refresh_token', refresh_token: a.refresh }).then(function (j) { return keepTokens(j, a).access; }, function (e) {
+        if (e instanceof TypeError) throw e;
+        throw signinErr();
+      });
+    }
+    return Promise.reject(signinErr());
+  }
+  function graph(path, opts) {
+    opts = opts || {};
+    return accessToken().then(function (tok) {
+      return fetch(CLOUD.graph + path, { method: opts.method || 'GET', headers: Object.assign({ Authorization: 'Bearer ' + tok }, opts.headers || {}), body: opts.body, cache: 'no-store' });
+    }).then(function (r) {
+      if (r.status === 401) throw signinErr();
+      if (opts.raw) return r;
+      if (!r.ok) { var e = new Error('OneDrive error (' + r.status + ')'); e.status = r.status; throw e; }
+      return r.status === 204 ? null : r.json();
+    });
+  }
+  // Finishes a sign-in that just came back from Microsoft. Runs once when the page loads.
+  function handleRedirect() {
+    var p = new URLSearchParams(location.search);
+    if (!p.has('code') && !p.has('error')) return Promise.resolve(false);
+    var saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem('ps-pkce') || 'null'); sessionStorage.removeItem('ps-pkce'); } catch (e) { /* ignore */ }
+    history.replaceState(null, '', location.pathname + ((saved && saved.hash) || ''));
+    if (!saved || p.get('state') !== saved.s) { toast('Sign-in could not be completed. Please try again.'); return Promise.resolve(false); }
+    if (p.has('error')) {
+      if (saved.silent) cloud.status = 'signin';
+      else toast('Sign-in was not completed: ' + String(p.get('error_description') || p.get('error')).split(/\r?\n/)[0]);
+      return Promise.resolve(false);
+    }
+    return tokenRequest({ grant_type: 'authorization_code', code: p.get('code'), redirect_uri: redirectUri(), code_verifier: saved.v }).then(function (j) {
+      var a = keepTokens(j, loadAuth());
+      var first = !prefs.cloud;
+      prefs.cloud = true; savePrefs();
+      return graph('/me').then(function (me) { a.user = me.userPrincipalName || me.mail || a.user || ''; a.name = me.displayName || a.name || ''; storeAuth(a); }, function () { /* name is optional */ })
+        .then(function () { if (first) toast('Signed in. Syncing with OneDrive…'); return true; });
+    }, function (e) { toast('Sign-in failed: ' + e.message); return false; });
+  }
+
+  function itemPath() { return '/me/drive/special/approot:/' + encodeURIComponent(prefs.cloudFile || CLOUD.file); }
+  function hasData(s) { return !s.meta.sample && ORDER.some(function (k) { return s[k].length; }); }
+  // Reads the data file from the app folder. If portfolio-data.json isn't there but exactly one .json file is, that file is used.
+  function pullRemote() {
+    return graph(itemPath(), { raw: true }).then(function (r) {
+      if (r.status === 404) {
+        return graph('/me/drive/special/approot/children').then(function (j) {
+          var js = (j && j.value || []).filter(function (f) { return f.file && /\.json$/i.test(f.name); });
+          if (js.length !== 1) return null;
+          prefs.cloudFile = js[0].name; savePrefs();
+          return js[0];
         });
-      }).catch(function (e) { if (e && e.name !== 'AbortError') toast('Could not open that file: ' + e.message); });
-    },
-    'file-reconnect': function () {
-      if (!link.handle) return;
-      link.handle.requestPermission({ mode: 'readwrite' }).then(function (p) {
-        if (p !== 'granted') { toast('Permission was not granted. Changes stay in this browser.'); return; }
-        link.status = 'linked'; paintSaveStatus(); render();
-        return syncWithFile().then(function () { toast('Reconnected to ' + link.handle.name); });
-      }).catch(function (e) { toast('Could not reconnect: ' + e.message); });
-    },
-    'file-unlink': function () {
-      idbDel('saveHandle').catch(function () {});
-      link = { handle: null, status: 'none', writtenAt: null, error: '' };
-      render(); toast('Save file unlinked. Data stays in this browser.');
+      }
+      if (!r.ok) { var e = new Error('OneDrive error (' + r.status + ')'); e.status = r.status; throw e; }
+      return r.json();
+    }).then(function (item) {
+      if (!item || !item['@microsoft.graph.downloadUrl']) return item ? { item: item, data: null } : null;
+      return fetch(item['@microsoft.graph.downloadUrl'], { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (t) {
+        var data = null; try { data = JSON.parse(t); } catch (e) { /* not JSON */ }
+        return { item: item, data: data };
+      });
+    });
+  }
+  function pushRemote() {
+    var headers = { 'Content-Type': 'application/json' };
+    if (prefs.cloudETag) headers['If-Match'] = prefs.cloudETag;
+    return graph(itemPath() + ':/content', { method: 'PUT', headers: headers, body: JSON.stringify(state, null, 2), raw: true }).then(function (r) {
+      if (r.status === 412) { var c = new Error('Changed on another device'); c.conflict = true; throw c; }
+      if (!r.ok) { var e = new Error('OneDrive error (' + r.status + ')'); e.status = r.status; throw e; }
+      return r.json();
+    }).then(function (item) { prefs.cloudETag = item.eTag; savePrefs(); cloud.dirty = false; });
+  }
+  // Keeps the other copy's data as is (no new save time) but adds this device's snapshot days.
+  function adoptRemote(r) {
+    var localHist = state.history;
+    state = normalize(r); state.meta.sample = false; state.meta.migrated = false;
+    state.history = mergeHistory(state.history, localHist);
+    try { localStorage.setItem(KEY, JSON.stringify(state)); ui.savedAt = Date.now(); } catch (e) { /* ignore */ }
+  }
+  var syncing = null, cloudTimer;
+  // Full sync: download, keep whichever copy was saved last, combine history, upload if this device has anything new.
+  function cloudSync() {
+    if (!prefs.cloud || !cloudAvailable()) return Promise.resolve();
+    if (syncing) { cloud.again = Math.max(cloud.again, 1); return syncing; }
+    cloud.status = 'syncing'; paintSaveStatus();
+    var adopted = false;
+    syncing = pullRemote().then(function (remote) {
+      cloud.missing = !remote;
+      if (!remote || !looksValid(remote.data)) {
+        if (remote && remote.data == null && remote.item) { cloud.error = 'The file in OneDrive is not Portfolio Studio data.'; }
+        prefs.cloudETag = remote && remote.item ? remote.item.eTag : null; savePrefs();
+        return hasData(state) ? pushRemote() : null;
+      }
+      var r = remote.data;
+      if (remote.item.eTag === prefs.cloudETag && !cloud.dirty) return null;
+      prefs.cloudETag = remote.item.eTag; savePrefs();
+      if (!hasData(state) || n(r.meta && r.meta.savedAt) > n(state.meta.savedAt)) {
+        var before = (r.history || []).length;
+        adoptRemote(r); adopted = true;
+        cloud.dirty = false;
+        return state.history.length !== before ? pushRemote() : null;
+      }
+      state.history = mergeHistory(state.history, r.history);
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+      return pushRemote();
+    }).then(function () {
+      cloud.status = 'synced'; cloud.at = Date.now(); if (!/not Portfolio/.test(cloud.error)) cloud.error = '';
+    }, function (e) {
+      if (e && e.conflict) { cloud.again += 1; cloud.status = 'syncing'; }
+      else if (e && e.signin) cloud.status = 'signin';
+      else if (e instanceof TypeError || navigator.onLine === false) cloud.status = 'offline';
+      else { cloud.status = 'error'; cloud.error = (e && e.message) || 'Unknown error'; }
+    }).then(function () {
+      syncing = null;
+      paintSaveStatus();
+      if (adopted) softRender(); else if (cloud.status !== 'synced' || currentView() === 'settings') softRender();
+      if (cloud.again && cloud.again < 3) { cloud.again += 1; return cloudSync(); }
+      cloud.again = 0;
+    });
+    return syncing;
+  }
+  // After a change: upload in about 2 seconds. If OneDrive changed in the meantime, fall back to a full sync.
+  function cloudSaveSoon() {
+    if (!prefs.cloud || !cloudAvailable()) return;
+    cloud.dirty = true;
+    clearTimeout(cloudTimer);
+    cloudTimer = setTimeout(function () {
+      if (syncing || !prefs.cloudETag) { cloudSync(); return; }
+      cloud.status = 'syncing'; paintSaveStatus();
+      pushRemote().then(function () { cloud.status = 'synced'; cloud.at = Date.now(); paintSaveStatus(); }, function () { cloudSync(); });
+    }, 2000);
+  }
+  function initCloud() {
+    if (!cloudAvailable()) return;
+    handleRedirect().then(function (justSignedIn) {
+      if (!prefs.cloud) { softRender(); return; }
+      var a = loadAuth(), expired = !a || !(a.refreshExp - 60000 > Date.now());
+      var tried = false; try { tried = sessionStorage.getItem('ps-silent') === '1'; } catch (e) { /* ignore */ }
+      // A day after sign-in the refresh token ends; quietly reuse the Microsoft session once per visit.
+      if (!justSignedIn && expired && cloud.status !== 'signin' && !tried && navigator.onLine !== false) {
+        try { sessionStorage.setItem('ps-silent', '1'); } catch (e) { /* ignore */ }
+        signIn(true); return;
+      }
+      if (expired && !justSignedIn) { cloud.status = 'signin'; paintSaveStatus(); softRender(); return; }
+      try { sessionStorage.removeItem('ps-silent'); } catch (e) { /* ignore */ }
+      return cloudSync();
+    });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) cloudSync(); });
+    window.addEventListener('online', function () { cloudSync(); });
+    setInterval(function () { if (!document.hidden) cloudSync(); }, 5 * 60000);
+  }
+  var cloudActs = {
+    'cloud-signin': function () { try { sessionStorage.removeItem('ps-silent'); } catch (e) { /* ignore */ } signIn(false); },
+    'cloud-sync': function () { cloudSync().then(function () { if (cloud.status === 'synced') toast('Synced with OneDrive'); }); },
+    'cloud-signout': function () {
+      if (!confirm('Stop syncing this device with OneDrive? Your data stays on this device and in OneDrive.')) return;
+      prefs.cloud = false; prefs.cloudETag = null; savePrefs(); storeAuth(null);
+      cloud = { status: 'off', at: null, error: '', dirty: false, again: 0 };
+      render(); toast('Signed out of OneDrive on this device');
     }
   };
 
@@ -1161,24 +1277,28 @@ var FEEDS = {
     document.querySelectorAll('[data-feed-chip]').forEach(function (el) { el.className = 'chip ' + s.cls; el.textContent = s.text; });
   }
   function saveText() {
-    if (link.status === 'linked') return 'Saving to ' + link.handle.name + (link.writtenAt ? ' · ' + when(link.writtenAt) : '');
-    if (link.status === 'needs-permission') return 'Save file needs reconnecting';
-    if (link.status === 'error') return 'Save file error · saved in browser';
-    return ui.savedAt || state.meta.savedAt ? 'Saved in this browser · ' + when(ui.savedAt || state.meta.savedAt) : 'Not saved yet';
+    if (prefs.cloud) {
+      if (cloud.status === 'synced') return 'Synced to OneDrive · ' + when(cloud.at);
+      if (cloud.status === 'syncing') return 'Syncing with OneDrive…';
+      if (cloud.status === 'offline') return 'Offline · will sync to OneDrive';
+      if (cloud.status === 'signin') return 'OneDrive: sign in again';
+      if (cloud.status === 'error') return 'OneDrive sync error · saved on this device';
+    }
+    return ui.savedAt || state.meta.savedAt ? 'Saved on this device · ' + when(ui.savedAt || state.meta.savedAt) : 'Not saved yet';
   }
   function paintSaveStatus() { document.querySelectorAll('[data-save-status]').forEach(function (el) { el.textContent = saveText(); }); }
 
   function renderTopline() {
     var s = feedStatus();
     return '<div class="topline"><div class="flag">' + (state.meta.sample ? 'Sample data · not financial advice' : 'Not financial advice') + '</div>' +
-      '<div class="actions"><span class="chip date" data-save-status>' + esc(saveText()) + '</span><span class="chip ' + s.cls + '" data-feed-chip>' + esc(s.text) + '</span></div></div>';
+      '<div class="actions"><span class="chip" data-save-status>' + esc(saveText()) + '</span><span class="chip ' + s.cls + '" data-feed-chip>' + esc(s.text) + '</span></div></div>';
   }
   function renderBanners() {
     var out = '';
     if (state.meta.migrated) out += '<div class="banner"><p><strong>Brought over your data from Portfolio Manager.</strong> Everything you entered there is here. Nothing was changed in the old page.</p><button class="btn sm" data-act="dismiss-migrated">Got it</button></div>';
-    else if (state.meta.sample) out += '<div class="banner"><p><strong>You are looking at sample data.</strong> Stock quantities and purchase prices come from your holdings list, and stock prices are the Oct 3, 2026 snapshot. Every other account is a placeholder. Edit anything, or clear it and enter your own.</p><span class="actions"><button class="btn sm" data-act="dismiss-banner">Keep and dismiss</button><button class="btn sm primary" data-act="clear-all">Start fresh</button></span></div>';
-    if (link.status === 'needs-permission') out += '<div class="banner"><p><strong>Reconnect your save file.</strong> The browser needs your OK again before this page can write to ' + esc(link.handle.name) + '. Until then, changes are saved in this browser only.</p><button class="btn sm primary" data-act="file-reconnect">Reconnect</button></div>';
-    if (link.status === 'error') out += '<div class="banner"><p><strong>Could not write the save file.</strong> ' + esc(link.error) + ' Changes are still saved in this browser.</p><span class="actions"><button class="btn sm" data-act="file-reconnect">Try again</button><button class="btn sm" data-act="file-unlink">Unlink</button></span></div>';
+    else if (state.meta.sample) out += '<div class="banner"><p><strong>You are looking at sample data.</strong> Every holding and account here is made up. Edit anything, clear it and enter your own, or sign in to OneDrive in Settings to load your data.</p><span class="actions"><button class="btn sm" data-act="dismiss-banner">Keep and dismiss</button><button class="btn sm primary" data-act="clear-all">Start fresh</button></span></div>';
+    if (prefs.cloud && cloud.status === 'signin') out += '<div class="banner"><p><strong>Sign in to OneDrive again.</strong> Your Microsoft sign-in has ended, so changes are saved on this device only until you sign in.</p><button class="btn sm primary" data-act="cloud-signin">Sign in</button></div>';
+    if (prefs.cloud && cloud.status === 'error') out += '<div class="banner"><p><strong>Could not sync with OneDrive.</strong> ' + esc(cloud.error) + ' Changes are still saved on this device.</p><button class="btn sm" data-act="cloud-sync">Try again</button></div>';
     return out;
   }
   function renderSideFoot() {
@@ -1864,19 +1984,27 @@ var FEEDS = {
       '<div class="actions"><button class="btn" data-act="export-history">Export history (CSV)</button><button class="btn danger" data-act="clear-history"' + (hs.length ? '' : ' disabled') + '>Delete all history</button></div>' +
       '<div class="field"><label for="delSnap">Delete one day</label><div class="inline"><input type="date" id="delSnap" data-fk="delSnap"><button class="btn" data-act="del-snap" type="button">Delete</button></div></div></section>';
   }
+  function cloudBlock() {
+    if (!cloudAvailable()) return '<p class="status-line">OneDrive sync works on the published page. This copy was opened from a file, so data stays on this device; use Export and Import below to move it.</p>';
+    if (!prefs.cloud) return '<p>Sign in with your <strong>personal</strong> Microsoft account. The page can only see its own folder, OneDrive › Apps › Portfolio Studio, and keeps ' + esc(CLOUD.file) + ' there.</p><div class="actions"><button class="btn primary" data-act="cloud-signin">Sign in to OneDrive</button></div>';
+    var a = loadAuth() || {}, ok = cloud.status === 'synced' || cloud.status === 'syncing';
+    return '<div class="status-line ' + (ok ? 'ok' : cloud.status === 'offline' ? '' : 'bad') + '">' + esc(saveText()) + '</div>' +
+      '<p>' + (a.name || a.user ? 'Signed in as ' + esc(a.name || a.user) + (a.name && a.user ? ' (' + esc(a.user) + ')' : '') + '. ' : '') + 'File: OneDrive › Apps › Portfolio Studio › ' + esc(prefs.cloudFile || CLOUD.file) + '.</p>' +
+      (cloud.missing && !hasData(state) ? '<p class="status-line bad">No data file found in OneDrive › Apps › Portfolio Studio yet. Import your data below or start entering it, and it will be uploaded there. If your file is in another folder, move it into that one.</p>' : '') +
+      '<p class="hint" style="margin:0">The most recent save wins, and net worth history from every device is combined. Microsoft sign-in lasts about a day; after that the page signs you back in when it opens, or asks you to.</p>' +
+      '<div class="actions">' + (cloud.status === 'signin' ? '<button class="btn primary" data-act="cloud-signin">Sign in again</button>' : '<button class="btn" data-act="cloud-sync">Sync now</button>') + '<button class="btn danger" data-act="cloud-signout">Sign out on this device</button></div>';
+  }
   function renderSettings() {
     var f = state.feed, prov = FEEDS[f.provider] || FEEDS.finnhub, key = prefs.keys[f.provider] || '', st = state.settings;
     var provOpts = Object.keys(FEEDS).map(function (k) { return '<option value="' + k + '"' + (f.provider === k ? ' selected' : '') + '>' + FEEDS[k].label + '</option>'; }).join('');
-    var fileBlock;
-    if (!FS) fileBlock = '<p>Linking a save file needs Chrome or Edge. In this browser, use Export and Import below to keep a copy, for example in your OneDrive folder.</p>';
-    else if (link.status === 'none') fileBlock = '<p>Link a JSON file, for example in your OneDrive folder, and every change saves to it automatically. Open the same file on another computer to pick up where you left off.</p><div class="actions"><button class="btn primary" data-act="file-link">Create save file</button><button class="btn" data-act="file-open">Open existing file</button></div>';
-    else fileBlock = '<div class="status-line ' + (link.status === 'linked' ? 'ok' : 'bad') + '">' + esc(saveText()) + '</div><div class="actions">' +
-      (link.status === 'linked' ? '<button class="btn" data-act="file-save-now">Save now</button>' : '<button class="btn primary" data-act="file-reconnect">Reconnect</button>') +
-      '<button class="btn" data-act="file-open">Open a different file</button><button class="btn danger" data-act="file-unlink">Unlink</button></div>';
+    var fileBlock = cloudBlock();
     var themeBtns = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button type="button" data-act="theme" data-val="' + x[0] + '" aria-pressed="' + (prefs.theme === x[0]) + '">' + x[1] + '</button>'; }).join('');
     return '<header class="head"><div><div class="eyebrow">Settings</div><h1>Prices, saving, and your plan.</h1></div></header>' +
       '<div class="set-grid">' +
-      '<section class="card set-card" aria-labelledby="setFeed"><h2 id="setFeed">Live price feed</h2><p>Stock and fund prices come from a market-data service that needs a free API key. The key stays in this browser: it is not part of exports or the save file, and it is sent only to ' + esc(prov.label) + '.</p>' +
+      '<section class="card set-card" aria-labelledby="setSave"><h2 id="setSave">Saving and sync</h2><p>Every change saves on this device automatically. OneDrive sync keeps your computer and phone in step.</p>' + fileBlock +
+      '<div class="field"><span class="lab">Copies and backups</span><div class="actions"><button class="btn" data-act="export-json">Export data (JSON)</button><button class="btn" data-act="import-json">Import data</button><button class="btn" data-act="export-csv">Export accounts (CSV)</button></div></div>' +
+      '<div class="field"><span class="lab">Start over</span><div class="actions"><button class="btn danger" data-act="clear-all">Remove all data</button><button class="btn" data-act="load-sample">Load sample data</button></div></div></section>' +
+      '<section class="card set-card" aria-labelledby="setFeed"><h2 id="setFeed">Live price feed</h2><p>Stock and fund prices come from a market-data service that needs a free API key. The key stays on this device: it is not part of exports or OneDrive sync, and it is sent only to ' + esc(prov.label) + '.</p>' +
       '<div class="field"><label for="feedProvider">Provider</label><select id="feedProvider" data-feed="provider" data-fk="feedProvider">' + provOpts + '</select><span class="hint">' + esc(prov.note) + '</span></div>' +
       '<div class="field"><label for="feedKey">API key</label><div class="inline"><input id="feedKey" type="password" autocomplete="off" spellcheck="false" value="' + esc(key) + '" placeholder="Paste your key" data-fk="feedKey"><button class="btn" data-act="toggle-key" type="button">Show</button><button class="btn" data-act="test-feed" type="button">Test</button></div>' +
       '<span class="hint"><a href="' + prov.signup + '" target="_blank" rel="noopener noreferrer">Get a free ' + esc(prov.label) + ' key</a> · takes about a minute.</span></div>' +
@@ -1884,9 +2012,6 @@ var FEEDS = {
       '<div class="field"><label for="autoSettings">Refresh automatically</label>' + autoSelect('autoSettings') + '<span class="hint">Runs while this page is open and visible.</span></div>' +
       '<label class="check"><input type="checkbox" data-feed="marketHoursOnly" data-fk="mho"' + (f.marketHoursOnly ? ' checked' : '') + '> Only during US market hours (9:30 to 4:00 New York time, weekdays)</label>' +
       '<div class="actions">' + refreshBtn(true) + '</div></section>' +
-      '<section class="card set-card" aria-labelledby="setSave"><h2 id="setSave">Saving your data</h2><p>Every change saves in this browser automatically. ' + (FS ? 'A save file adds a copy you control.' : '') + '</p>' + fileBlock +
-      '<div class="field"><span class="lab">Copies and backups</span><div class="actions"><button class="btn" data-act="export-json">Export data (JSON)</button><button class="btn" data-act="import-json">Import data</button><button class="btn" data-act="export-csv">Export accounts (CSV)</button></div></div>' +
-      '<div class="field"><span class="lab">Start over</span><div class="actions"><button class="btn danger" data-act="clear-all">Remove all data</button><button class="btn" data-act="load-sample">Load sample data</button></div></div></section>' +
       historyCard() +
       '<section class="card set-card" aria-labelledby="setGoal"><h2 id="setGoal">Retirement goal</h2><p>Shown on the Overview and Projections pages. Compares your investments and cash at retirement, after estimated taxes, with what you would need. Home equity is not counted.</p>' +
       numField('goalAge', 'Your current age', '1', '') +
@@ -2108,7 +2233,7 @@ var FEEDS = {
     'dismiss-banner': function () { state.meta.sample = false; save(); render(); },
     'dismiss-migrated': function () { state.meta.migrated = false; state.meta.sample = false; save(); render(); },
     'clear-all': function () {
-      if (!confirm('Remove every account, snapshot and setting from this page' + (link.status === 'linked' ? ' and the linked save file' : '') + '? Export your data first if you want a copy.')) return;
+      if (!confirm('Remove every account, snapshot and setting from this page' + (prefs.cloud ? ' and from OneDrive' : '') + '? Export your data first if you want a copy.')) return;
       var feed = state.feed;
       state = normalize({ feed: feed }); state.meta.sample = false; save(); render(); toast('Cleared. Add your first account to begin.');
     },
@@ -2119,14 +2244,13 @@ var FEEDS = {
     'export-json': function () { download('portfolio-data-' + today() + '.json', JSON.stringify(state, null, 2), 'application/json'); },
     'import-json': function () { $('#importFile').click(); },
     'export-csv': function () { download('portfolio-accounts-' + today() + '.csv', accountsCsv(), 'text/csv'); },
-    'file-save-now': function () { save(); queueWrite().then(function () { if (link.status === 'linked') toast('Saved to ' + link.handle.name); }); },
     'proj-csv': function () {
       var rows = [['Year', 'Stocks & funds', '401(k)', 'CDs & cash', 'Home & vehicle', 'Mortgage', 'Net worth', 'Est. taxes if cashed out', 'Net worth after tax']];
       project(state).forEach(function (r) { rows.push([r.y === 0 ? 'Today' : r.year, r.stocks.toFixed(2), r.k401.toFixed(2), (r.cds + r.cash).toFixed(2), r.assets.toFixed(2), (-r.mortgage).toFixed(2), r.net.toFixed(2), (r.taxStocks + r.tax401).toFixed(2), r.netAfter.toFixed(2)]); });
       download('portfolio-projection-' + today() + '.csv', toCsv(rows), 'text/csv');
     }
   };
-  Object.assign(actions, fileActs);
+  Object.assign(actions, cloudActs);
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-act]');
     if (!el || !actions[el.dataset.act]) return;
@@ -2182,7 +2306,8 @@ var FEEDS = {
   if (state.meta.migrated) save();
   if (snapDue()) save();
   render();
-  initFileLink();
+  initCloud();
+  if ('serviceWorker' in navigator && cloudAvailable()) navigator.serviceWorker.register('sw.js').catch(function () { /* offline cache is optional */ });
   setTimeout(autoTick, 1500);
 })();
 </script>
