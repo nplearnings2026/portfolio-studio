@@ -459,6 +459,7 @@ function defaultSettings() {
   return { scenario: 'base', horizon: 15, stocksGrowth: 6.5, k401Growth: 6, stocksContrib: 6000, cashContrib: 3600, inflation: 2.5, real: false, monthlyExpenses: 4500, reserveMonths: 6, contribGrowth: 0, cdMode: 'savings', projView: 'combined',
     taxCapGains: 15, taxState: 0, taxInterest: 22, taxK401: 22, afterTax: false,
     goalAge: 50, goalRetireAge: 65, goalMonthly: 14167, goalRate: 4,
+    ssBenefit: 0, ssClaimAge: 67, ssSpouseBenefit: 0, ssSpouseAge: 50, ssSpouseClaimAge: 67, ssCut: 0, otherIncome: 0, otherStartAge: 65,
     autoSnap: true, histRange: 'all', histAfterTax: false };
 }
 function defaultFeed() {
@@ -585,6 +586,32 @@ function taxNow(s) {
   return { gain: t.stockGain, stocks: stocks, k401: k401, total: stocks + k401, rates: r };
 }
 
+// Social Security full retirement age by birth year (66 for 1954 and earlier, rising 2 months a year to 67 for 1960 and later).
+function fraYears(birthYear) { return birthYear >= 1960 ? 67 : birthYear <= 1954 ? 66 : 66 + (birthYear - 1954) * 2 / 12; }
+// Share of the full-retirement-age benefit when claiming at a given age (62-70): 5/9% less per month for the first
+// 36 months early and 5/12% per month beyond that; 2/3% more per month of delay (8% a year) up to 70.
+function ssFactor(claimAge, fra) {
+  var c = Math.max(62, Math.min(70, claimAge)), m = Math.round((fra - c) * 12);
+  if (m > 0) return 1 - (Math.min(m, 36) * 5 / 900 + Math.max(0, m - 36) * 5 / 1200);
+  return 1 + (-m) * 2 / 300;
+}
+// Guaranteed retirement income, per month in today's dollars. Up to 85% of Social Security is taxable; other income is fully
+// taxable. Both use the 401(k) withdrawal rate (plus state). startAge is always in terms of your own age.
+function retireIncome(st) {
+  var tax = taxRates(st).k401, cut = Math.min(100, Math.max(0, n(st.ssCut))) / 100, age = n(st.goalAge), yr = new Date().getFullYear(), out = [];
+  var claim = function (c) { return Math.max(62, Math.min(70, n(c) || 67)); };
+  if (n(st.ssBenefit) > 0) {
+    var f = ssFactor(claim(st.ssClaimAge), fraYears(yr - age)), g = n(st.ssBenefit) * f * (1 - cut);
+    out.push({ key: 'ss', label: 'Social Security', factor: f, gross: g, net: g * (1 - 0.85 * tax), claimAge: claim(st.ssClaimAge), startAge: claim(st.ssClaimAge) });
+  }
+  if (n(st.ssSpouseBenefit) > 0) {
+    var sa = n(st.ssSpouseAge) || age, f2 = ssFactor(claim(st.ssSpouseClaimAge), fraYears(yr - sa)), g2 = n(st.ssSpouseBenefit) * f2 * (1 - cut);
+    out.push({ key: 'spouse', label: 'Spouse’s Social Security', factor: f2, gross: g2, net: g2 * (1 - 0.85 * tax), claimAge: claim(st.ssSpouseClaimAge), startAge: age + (claim(st.ssSpouseClaimAge) - sa) });
+  }
+  if (n(st.otherIncome) > 0) out.push({ key: 'other', label: 'Other income', gross: n(st.otherIncome), net: n(st.otherIncome) * (1 - tax), startAge: n(st.otherStartAge) || n(st.goalRetireAge) });
+  return out;
+}
+
 // Retirement goal: the yearly income you want (in today's dollars) divided by the withdrawal rate gives the
 // savings target. Compared with investments and cash at retirement, after estimated taxes; home equity is left out.
 function goalStatus(s) {
@@ -595,7 +622,12 @@ function goalStatus(s) {
   var rows = project(sim), r = rows[rows.length - 1];
   var infl = Math.pow(1 + n(st.inflation) / 100, r.y);
   var after = r.stocks + r.k401 + r.cds + r.cash - r.taxStocks - r.tax401;   // rows are nominal unless "today's dollars" is on
-  var targetToday = income / rate, target = st.real ? targetToday : targetToday * infl;
+  // Guaranteed income lowers what savings must cover. Until each source starts, savings cover it too (the bridge).
+  var streams = retireIncome(st), R = n(st.goalRetireAge);
+  var guaranteed = streams.reduce(function (a, x) { return a + x.net * 12; }, 0);
+  var bridge = streams.reduce(function (a, x) { return a + x.net * 12 * Math.max(0, x.startAge - R); }, 0);
+  var fromSavings = Math.max(0, income - guaranteed);
+  var targetToday = fromSavings / rate + bridge, target = st.real ? targetToday : targetToday * infl;
   var gap = target - after;
   // Extra amount per year, invested like the stocks, that would close the gap after capital-gains tax.
   var sc = SCEN[st.scenario] || SCEN.base, g = (n(st.stocksGrowth) + sc.mkt) / 100;
@@ -606,7 +638,8 @@ function goalStatus(s) {
     ok: true, yrs: ny, year: r.year, age: n(st.goalRetireAge), real: !!st.real, rate: rate, income: income, monthly: monthly,
     after: after, target: target, targetToday: targetToday, gap: gap,
     extra: gap > 0 && perDollar > 0 ? gap / perDollar : 0,
-    incomeToday: after * (st.real ? 1 : 1 / infl) * rate
+    streams: streams, guaranteed: guaranteed, bridge: bridge, fromSavings: fromSavings,
+    incomeToday: Math.max(0, after * (st.real ? 1 : 1 / infl) - bridge) * rate + guaranteed
   };
 }
 
@@ -1755,18 +1788,26 @@ var FEEDS = {
   function goalCard() {
     var g = goalStatus(state), st = state.settings;
     if (!g.ok) return '<article class="card goal"><div class="eyebrow">Retirement goal</div><p>Set your age, retirement age and the yearly income you want in <a href="#/settings">Settings</a> to see whether you are on track.</p></article>';
-    var on = g.gap <= 0, fill = Math.max(2, Math.min(100, g.after / g.target * 100));
+    var on = g.gap <= 0, fill = g.target > 0 ? Math.max(2, Math.min(100, g.after / g.target * 100)) : 100;
     var hz = Math.round(n(st.horizon)) || 15;
+    var incomeLine = incomeSummary(g);
     return '<article class="card goal"><div class="goal-top"><div><div class="eyebrow">Retirement goal · age ' + g.age + ' in ' + g.year + '</div>' +
       '<h2>' + money0(g.monthly) + ' a month in retirement <span class="muted" style="font-weight:500">· ' + money0(g.income) + ' a year</span></h2></div><span class="status ' + (on ? 'ok' : 'short') + '">' + (on ? 'On track' : 'Short of goal') + '</span></div>' +
       '<div class="goal-nums"><div><span>Projected at retirement, after tax</span><b>' + money0(g.after) + '</b></div><div><span>Needed' + (g.real ? '' : ' in ' + g.year + ' dollars') + '</span><b class="muted">' + money0(g.target) + '</b></div></div>' +
-      '<div class="goal-bar" role="img" aria-label="' + Math.round(g.after / g.target * 100) + '% of goal"><i class="' + (on ? 'ok' : '') + '" style="width:' + fill.toFixed(1) + '%"></i></div>' +
+      '<div class="goal-bar" role="img" aria-label="' + (g.target > 0 ? Math.round(g.after / g.target * 100) : 100) + '% of goal"><i class="' + (on ? 'ok' : '') + '" style="width:' + fill.toFixed(1) + '%"></i></div>' +
       '<p>' + (on ? '<b>Ahead by ' + money0(-g.gap) + '.</b> ' : '<b>Short by ' + money0(g.gap) + '.</b> About <b>' + money0(g.extra) + ' more a year</b>, invested like your stocks, would close the gap. ') +
-      'Your savings would support about <b>' + money0(g.incomeToday / 12) + ' a month</b> (' + money0(g.incomeToday) + ' a year) in today’s dollars at a ' + pct(g.rate * 100) + ' withdrawal rate.</p>' +
+      'Your savings' + (g.streams.length ? ' and guaranteed income' : '') + ' would support about <b>' + money0(g.incomeToday / 12) + ' a month</b> (' + money0(g.incomeToday) + ' a year) in today’s dollars at a ' + pct(g.rate * 100) + ' withdrawal rate.</p>' + incomeLine +
       '<p class="goal-note">Counts stocks, 401(k), CDs and savings after estimated taxes; home equity is left out. ' +
-      (g.real ? '' : money0(g.monthly) + ' a month (' + money0(g.income) + ' a year) in today’s dollars at a ' + pct(g.rate * 100) + ' withdrawal rate needs ' + money0(g.targetToday) + ' today, or ' + money0(g.target) + ' in ' + g.year + ' after ' + pct(n(st.inflation)) + ' yearly inflation. ') +
+      'Needed = ' + money0(g.fromSavings / 12) + ' a month from savings ÷ ' + pct(g.rate * 100) + ' withdrawal rate' + (g.bridge > 0.5 ? ' + ' + money0(g.bridge) + ' bridge' : '') + ' = ' + money0(g.targetToday) + ' in today’s dollars' + (g.real ? '. ' : ', or ' + money0(g.target) + ' in ' + g.year + ' after ' + pct(n(st.inflation)) + ' yearly inflation. ') +
       'Uses the scenario and contributions on the left.</p>' +
       '<div class="actions">' + (hz !== g.yrs ? '<button class="btn sm" data-act="horizon-goal">Show projections to ' + g.year + '</button>' : '') + '<a class="btn sm" href="#/settings">Change goal</a></div></article>';
+  }
+  function incomeSummary(g) {
+    if (!g.streams.length) return '<p>Add your Social Security estimate in <a href="#/settings">Settings</a>. It lowers what your savings need to cover.</p>';
+    var parts = g.streams.map(function (x) { return '<b>' + money0(x.net) + '</b> ' + (x.key === 'other' ? 'other income' : x.key === 'spouse' ? 'spouse’s Social Security' : 'Social Security') + ' from age ' + Math.round(x.startAge * 10) / 10; });
+    var gaps = g.streams.filter(function (x) { return x.startAge > g.age; }).map(function (x) { return x.startAge; });
+    return '<p>Guaranteed income after tax: ' + parts.join(', ') + '. Savings need to cover <b>' + money0(g.fromSavings / 12) + ' a month</b>' +
+      (g.bridge > 0.5 ? ', plus <b>' + money0(g.bridge) + '</b> to bridge the years from ' + g.age + ' until ' + (gaps.length === 1 ? 'age ' + Math.round(gaps[0] * 10) / 10 : 'each source starts') : '') + '.</p>';
   }
   function goalMini() {
     var g = goalStatus(state);
@@ -1969,6 +2010,23 @@ var FEEDS = {
   }
 
   /* ---------- settings ---------- */
+  function incomeFields() {
+    var st = state.settings, yr = new Date().getFullYear(), streams = retireIncome(st);
+    var find = function (k) { return streams.filter(function (x) { return x.key === k; })[0]; };
+    var claimHint = function (x, who) {
+      if (!x) return 'Between 62 and 70.';
+      return 'At ' + x.claimAge + ', ' + who + ' benefit is ' + money0(x.gross) + ' a month (' + Math.round(x.factor * 100) + '% of the full amount' + (n(st.ssCut) ? ', after the ' + n(st.ssCut) + '% cut' : '') + '), about ' + money0(x.net) + ' after tax.';
+    };
+    var fra = fraYears(yr - n(st.goalAge)), fraTxt = fra % 1 ? Math.floor(fra) + ' and ' + Math.round((fra % 1) * 12) + ' months' : String(fra);
+    return '<div class="field"><span class="lab">Social Security and other income</span><span class="hint">Monthly amounts in today’s dollars. Guaranteed income lowers what your savings need to cover.</span></div>' +
+      numField('ssBenefit', 'Your Social Security at full retirement age, per month ($)', '10', 'From your statement at ssa.gov/myaccount. Your full retirement age is ' + fraTxt + '. Use 0 to leave it out.') +
+      numField('ssClaimAge', 'Age you’ll start Social Security', '1', claimHint(find('ss'), 'your')) +
+      numField('ssSpouseBenefit', 'Spouse’s Social Security at full retirement age, per month ($)', '10', 'Optional. 0 leaves it out.') +
+      (n(st.ssSpouseBenefit) > 0 ? numField('ssSpouseAge', 'Spouse’s current age', '1', '') + numField('ssSpouseClaimAge', 'Age your spouse will start', '1', claimHint(find('spouse'), 'their')) : '') +
+      numField('ssCut', 'Assume Social Security is cut by (%)', '1', 'Optional safety margin. The trustees project the trust fund could run short in the mid-2030s, which would mean a cut of about 20% unless Congress acts. 0 assumes full benefits.') +
+      numField('otherIncome', 'Other guaranteed income, per month ($)', '50', 'A pension, rental income or annuity. Taxed at your 401(k) withdrawal rate.') +
+      (n(st.otherIncome) > 0 ? numField('otherStartAge', 'Starts at your age', '1', '') : '');
+  }
   function numField(key, label, step, hint) {
     return '<div class="field"><label for="s_' + key + '">' + label + '</label><input id="s_' + key + '" type="number" min="0" step="' + step + '" inputmode="decimal" value="' + esc(n(state.settings[key])) + '" data-set="' + key + '" data-fk="s_' + key + '">' + (hint ? '<span class="hint">' + hint + '</span>' : '') + '</div>';
   }
@@ -2018,6 +2076,7 @@ var FEEDS = {
       numField('goalRetireAge', 'Retirement age', '1', '') +
       numField('goalMonthly', 'Monthly income you want in retirement, in today’s dollars ($)', '100', 'What you want to spend each month; the goal uses 12 times this a year. Taxes on 401(k) withdrawals and stock gains are already taken out of your savings before this comparison.') +
       numField('goalRate', 'Withdrawal rate (%)', '0.1', 'The share of your savings you take out each year. 4% is a common rule of thumb for about 30 years of retirement; a lower rate is safer.') +
+      incomeFields() +
       '</section>' +
       '<section class="card set-card" aria-labelledby="setTax"><h2 id="setTax">Taxes</h2><p>Used for the after-tax figures on the Overview, Stocks and Projections pages. Rough estimates, not tax advice: dividends, short-term gains, deductions and the home-sale exclusion are left out.</p>' +
       taxField('taxCapGains', 'Long-term capital gains rate, federal (%)', 'Most households pay 15%; 0% at lower incomes and 20% at the highest. Assumes each position has been held over a year.') +
@@ -2282,7 +2341,7 @@ var FEEDS = {
       var key = ds.set;
       state.settings[key] = el.type === 'checkbox' ? el.checked : (key === 'horizon' ? parseInt(el.value, 10) : n(el.value));
       save();
-      if ($('#projOut')) refreshProjOutputs(); else renderSideFoot();
+      if ($('#projOut')) refreshProjOutputs(); else if (currentView() === 'settings') setTimeout(render, 0); else renderSideFoot();
       return;
     }
     if (ds.feed) {
