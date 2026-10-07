@@ -21,7 +21,9 @@
   --bg:#f3f5f4; --surface:#fff; --surface-soft:#e9edeb; --ink:#11231d; --muted:#5d6b66; --line:#d6ddda;
   --accent:#ef6b4a; --accent-soft:#ffe5de; --pos:#0b7457; --neg:#b8452a; --warn-soft:#fff3d6; --warn-line:#efd79c;
   --panel:#11231d; --panel-ink:#fff; --panel-trend:#7fe0bd;
-  --c-st:#ef6b4a; --c-k4:#0b7457; --c-cc:#e0a93b; --c-eq:#78b7cf;
+  --c-eq:#2a78d6; --c-st:#eb6834; --c-k4:#1baf7a; --c-cc:#eda100; --c-sv:#e87ba4;
+  --on-eq:#fff; --on-st:#fff; --on-k4:#11231d; --on-cc:#11231d; --on-sv:#11231d;
+  --div-pos:#2a78d6; --div-neg:#e34948; --div-mid:#e4e7e5;
   --focus:#276785; --shadow:0 18px 50px rgba(20,44,35,.08);
   --r-lg:26px; --r-md:15px;
   --sans:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -33,7 +35,9 @@
     --bg:#101613; --surface:#17201c; --surface-soft:#202b26; --ink:#eef4f1; --muted:#aab7b1; --line:#34423c;
     --accent:#ff7f5f; --accent-soft:#482b24; --pos:#60d0aa; --neg:#ff9a80; --warn-soft:#3a3019; --warn-line:#6b5728;
     --panel:#eef4f1; --panel-ink:#11231d; --panel-trend:#0b7457;
-    --c-st:#ff7f5f; --c-k4:#60d0aa; --c-cc:#e6b95d; --c-eq:#76bdd9;
+    --c-eq:#3987e5; --c-st:#d95926; --c-k4:#199e70; --c-cc:#c98500; --c-sv:#d55181;
+    --on-eq:#fff; --on-st:#fff; --on-k4:#fff; --on-cc:#11231d; --on-sv:#fff;
+    --div-pos:#3987e5; --div-neg:#e66767; --div-mid:#383835;
     --focus:#76bdd9; --shadow:0 18px 50px rgba(0,0,0,.26);
   }
 }
@@ -42,7 +46,9 @@
   --bg:#101613; --surface:#17201c; --surface-soft:#202b26; --ink:#eef4f1; --muted:#aab7b1; --line:#34423c;
   --accent:#ff7f5f; --accent-soft:#482b24; --pos:#60d0aa; --neg:#ff9a80; --warn-soft:#3a3019; --warn-line:#6b5728;
   --panel:#eef4f1; --panel-ink:#11231d; --panel-trend:#0b7457;
-  --c-st:#ff7f5f; --c-k4:#60d0aa; --c-cc:#e6b95d; --c-eq:#76bdd9;
+  --c-eq:#3987e5; --c-st:#d95926; --c-k4:#199e70; --c-cc:#c98500; --c-sv:#d55181;
+  --on-eq:#fff; --on-st:#fff; --on-k4:#fff; --on-cc:#11231d; --on-sv:#fff;
+  --div-pos:#3987e5; --div-neg:#e66767; --div-mid:#383835;
   --focus:#76bdd9; --shadow:0 18px 50px rgba(0,0,0,.26);
 }
 *{box-sizing:border-box}
@@ -335,6 +341,78 @@ input[type="range"]{width:100%;accent-color:var(--accent);min-height:28px}
 table.mini th{padding:8px 10px;font-size:9px}
 table.mini td{padding:7px 10px;font-size:12px}
 
+/* insights */
+.ins{margin-top:40px}
+.ins:first-of-type{margin-top:0}
+.ins-card{padding:22px}
+.wi-grid{display:grid;grid-template-columns:290px minmax(0,1fr);gap:26px;align-items:start}
+.wi-controls .cg:first-child{padding-top:0;border-top:0}
+.wi-out{min-width:0}
+.ins-h3{font-size:15px;margin:20px 0 4px}
+.ins-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:14px}
+.ins-stats>div{background:var(--surface);padding:14px 16px}
+.ins-stats span{display:block;font-size:12px;color:var(--muted)}
+.ins-stats b{display:block;font-size:22px;font-weight:600;margin:4px 0 2px}
+.ins-stats em{font-style:normal;font-size:12px;color:var(--muted)}
+.viz-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;font-size:12px;color:var(--muted);margin:8px 0 10px}
+.viz-legend span{display:inline-flex;align-items:center;gap:6px}
+.lk-area{width:12px;height:12px;border-radius:3px;background:var(--c);display:inline-block}
+.lk-line{width:16px;height:2px;border-radius:1px;background:var(--c);display:inline-block}
+.gain-key{display:inline-block;width:140px;height:10px;border-radius:5px;background:linear-gradient(90deg,var(--div-neg),var(--div-mid),var(--div-pos))}
+.viz-tip{position:fixed;z-index:40;display:none;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px 12px;font-size:12px;min-width:170px;max-width:300px}
+.vt-head{font-weight:600;color:var(--muted);margin-bottom:6px}
+.vt-row{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;padding:2px 0}
+.vt-row i{width:14px;height:2px;border-radius:1px;background:var(--muted)}
+.vt-row span{color:var(--muted)}
+.vt-row b{font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.xh-line{stroke:var(--muted);stroke-width:1;display:none}
+.xh-hit{fill:transparent;cursor:crosshair;touch-action:pan-y}
+.band{fill:var(--surface-soft)}
+.band-lab{fill:var(--muted);font-size:11px}
+.mk-line{stroke:var(--muted);stroke-width:1}
+.mk-lab{fill:var(--ink);font-size:11px;font-weight:600}
+.tgt-line{stroke:var(--ink);stroke-width:2}
+.tgt-dot{fill:var(--ink);stroke:var(--surface);stroke-width:2}
+.lever{cursor:default;outline:none}
+.lever:focus-visible .lever-bar,.lever:hover .lever-bar{filter:brightness(1.1)}
+.lever-bar{fill:var(--div-pos)}
+.lever-lab{fill:var(--ink);font-size:13px}
+.lever-lab,.lever-val,.mk-lab,.band-lab,.tm text,.tl-title,.tl-sub{font-family:var(--sans)}
+.tl-bg{fill:var(--surface)}
+.lever-val{fill:var(--ink);font-size:12px;font-weight:600}
+.tm-tile{cursor:pointer;outline:none}
+.tm-tile:hover rect,.tm-tile:focus-visible rect{filter:brightness(1.1)}
+.tm-tile:focus-visible rect{stroke:var(--ink);stroke-width:2}
+.tm-head{fill:var(--ink);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{min-height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:12px;font-weight:600;cursor:pointer}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.ins-toolbar{display:flex;flex-wrap:wrap;gap:10px 16px;justify-content:space-between;align-items:center;margin-bottom:8px}
+.tl-axis{stroke:var(--ink);stroke-width:2}
+.tl-tick{stroke:var(--muted);stroke-width:1}
+.tl-lead{stroke:var(--line);stroke-width:1}
+.tl-dot{fill:var(--ink);stroke:var(--surface);stroke-width:2}
+.tl-retire .tl-dot{fill:var(--accent)}
+.tl-warn .tl-dot{fill:var(--neg)}
+.tl-today .tl-dot{fill:var(--surface);stroke:var(--ink)}
+.tl-m{outline:none;cursor:default}
+.tl-m:focus-visible .tl-dot{stroke:var(--focus);stroke-width:3}
+.tl-title{fill:var(--ink);font-size:12.5px;font-weight:600}
+.tl-sub{fill:var(--muted);font-size:11px}
+.timeline .tl-retire::before{background:var(--accent)}
+.wf-up{fill:var(--div-pos)} .wf-down{fill:var(--div-neg)} .wf-total{fill:var(--muted)}
+.wf-zero{stroke:var(--ink);stroke-width:1}
+.wf-link{stroke:var(--muted);stroke-width:1}
+.wf-bar{outline:none}
+.wf-bar:hover rect:nth-child(2),.wf-bar:focus-visible rect:nth-child(2){filter:brightness(1.1)}
+.wf-head b{font-size:20px;font-weight:600;margin-right:8px}
+.wf-head span{font-size:13px;color:var(--muted)}
+details.tbl{margin-top:10px}
+details.tbl summary{cursor:pointer;font-size:12px;font-weight:700;min-height:34px;display:flex;align-items:center}
+details.tbl table{font-size:12px}
+@media (max-width:980px){.wi-grid{grid-template-columns:1fr}}
+@media (max-width:680px){.ins-stats{grid-template-columns:1fr}.ins-card{padding:16px}.mnav a{font-size:9px}}
+
 /* settings */
 .set-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;align-items:start}
 .set-card{padding:24px;display:grid;gap:16px}
@@ -399,7 +477,7 @@ dialog h2{font-size:20px}
   .rt td.lead::before,.rt td.act::before,.rt td.blank{display:none}
   .rt td.act{display:flex;gap:8px;justify-content:flex-end;padding-top:8px}
   .rt tfoot td{border:0}
-  .mnav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;z-index:20;left:0;right:0;bottom:0;padding:6px 6px calc(6px + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--surface) 94%,transparent);border-top:1px solid var(--line);backdrop-filter:blur(8px)}
+  .mnav{display:grid;grid-template-columns:repeat(6,1fr);position:fixed;z-index:20;left:0;right:0;bottom:0;padding:6px 6px calc(6px + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--surface) 94%,transparent);border-top:1px solid var(--line);backdrop-filter:blur(8px)}
   .mnav a{min-height:48px;padding:6px 2px;color:var(--muted);display:grid;gap:3px;place-items:center;font-size:10px;text-decoration:none}
   .mnav a[aria-current="page"]{color:var(--accent);font-weight:700}
   .mnav svg{width:19px;height:19px}
@@ -459,7 +537,7 @@ function defaultSettings() {
   return { scenario: 'base', horizon: 15, stocksGrowth: 6.5, k401Growth: 6, stocksContrib: 6000, cashContrib: 3600, inflation: 2.5, real: false, monthlyExpenses: 4500, reserveMonths: 6, contribGrowth: 0, cdMode: 'savings', projView: 'combined',
     taxCapGains: 15, taxState: 0, taxInterest: 22, taxK401: 22, afterTax: false,
     goalAge: 50, goalRetireAge: 65, goalMonthly: 14167, goalRate: 4,
-    ssBenefit: 0, ssClaimAge: 67, ssSpouseBenefit: 0, ssSpouseAge: 50, ssSpouseClaimAge: 67, ssCut: 0, otherIncome: 0, otherStartAge: 65,
+    planAge: 95, ssBenefit: 0, ssClaimAge: 67, ssSpouseBenefit: 0, ssSpouseAge: 50, ssSpouseClaimAge: 67, ssCut: 0, otherIncome: 0, otherStartAge: 65,
     autoSnap: true, histRange: 'all', histAfterTax: false };
 }
 function defaultFeed() {
@@ -502,7 +580,7 @@ function seed() {
       { id: uid(), name: 'Home', value: 420000, growth: 3 },
       { id: uid(), name: 'Vehicle', value: 18000, growth: -10 }
     ],
-    mortgage: [{ id: uid(), name: 'Home mortgage', balance: 286500, rate: 3.75, payment: 1528.2 }]
+    mortgage: [{ id: uid(), kind: 'Mortgage', name: 'Home mortgage', balance: 286500, rate: 3.75, payment: 1528.2 }]
   };
 }
 
@@ -516,6 +594,8 @@ function normalize(s) {
   if (s && s.settings && s.settings.goalMonthly == null && s.settings.goalIncome != null) out.settings.goalMonthly = Math.round(n(s.settings.goalIncome) / 12);
   delete out.settings.goalIncome;
   ORDER.forEach(function (k) { out[k] = s && Array.isArray(s[k]) ? s[k] : []; });
+  // Loans saved before loan types existed are mortgages.
+  out.mortgage = out.mortgage.map(function (r) { return Object.assign({ kind: 'Mortgage' }, r); });
   out.stocks = out.stocks.map(function (r) {
     return Object.assign({ symbol: '', manual: false, prevClose: null, quoteTime: null, quoteSource: '', quoteError: null }, r);
   });
@@ -641,6 +721,47 @@ function goalStatus(s) {
     streams: streams, guaranteed: guaranteed, bridge: bridge, fromSavings: fromSavings,
     incomeToday: Math.max(0, after * (st.real ? 1 : 1 / infl) - bridge) * rate + guaranteed
   };
+}
+
+// Age the lifetime plan runs to: 85-105, and always at least a year past retirement.
+function planEnd(st) { return Math.max(Math.min(105, Math.max(85, Math.round(n(st.planAge)) || 95)), (Math.round(n(st.goalRetireAge)) || 65) + 1); }
+// Lifetime plan in today's dollars, from now to the plan-until age (95 by default). Savings grow until retirement exactly as in Projections;
+// after that, each year pays for spending not covered by guaranteed income. Withdrawals come from cash and CDs first,
+// then stocks (capital-gains tax on the gain share), then the 401(k) (income tax). Home equity is never used.
+function lifePlan(s) {
+  var st = s.settings, END = planEnd(st), age0 = Math.round(n(st.goalAge)) || 50;
+  var R = Math.min(END - 1, Math.max(age0 + 1, Math.round(n(st.goalRetireAge)) || 65));
+  var sim = Object.assign({}, s, { settings: Object.assign({}, st, { real: true, horizon: Math.min(40, R - age0) }) });
+  var acc = project(sim), tx = taxRates(st), sc = SCEN[st.scenario] || SCEN.base, inf = n(st.inflation) / 100;
+  var real = function (g) { return (1 + g) / (1 + inf) - 1; };
+  var gS = real((n(st.stocksGrowth) + sc.mkt) / 100), gK = real((n(st.k401Growth) + sc.mkt) / 100);
+  var gC = real(wavg(s.cash, 'balance') / 100 * (1 - Math.min(0.99, tx.interest)));
+  var streams = retireIncome(st), spend = n(st.goalMonthly) * 12;
+  var ssAges = streams.filter(function (x) { return x.key !== 'other'; }).map(function (x) { return x.startAge; });
+  var ssStart = ssAges.length ? Math.min.apply(null, ssAges) : null;
+  var rows = acc.map(function (r) { return { age: age0 + r.y, year: r.year, cash: r.cash + r.cds, stocks: r.stocks, k401: r.k401, total: r.cash + r.cds + r.stocks + r.k401, phase: 'work', spend: 0, income: 0, fromSavings: 0, short: 0 }; });
+  var last = acc[acc.length - 1], cash = last.cash + last.cds, stocks = last.stocks, k4 = last.k401;
+  var basis = Math.max(0, last.stocks - last.gainStocks), ranOut = null;
+  for (var a = R; a <= END; a++) {
+    var row = { age: a, year: last.year + (a - R), cash: cash, stocks: stocks, k401: k4, total: cash + stocks + k4,
+      phase: ssStart !== null && a < ssStart ? 'bridge' : 'retired' };
+    var inc = streams.reduce(function (t, x) { return t + (a >= x.startAge ? x.net * 12 : 0); }, 0);
+    var need = Math.max(0, spend - inc), got = 0, w;
+    w = Math.min(cash, need); cash -= w; got += w; need -= w;
+    if (need > 0.5 && stocks > 0) {
+      var keep = 1 - Math.max(0, (stocks - basis) / stocks) * tx.cap, gross = Math.min(stocks, need / keep);
+      basis -= basis * (gross / stocks); stocks -= gross; got += gross * keep; need -= gross * keep;
+    }
+    if (need > 0.5 && k4 > 0) {
+      var keep2 = 1 - Math.min(0.99, tx.k401), gross2 = Math.min(k4, need / keep2);
+      k4 -= gross2; got += gross2 * keep2; need -= gross2 * keep2;
+    }
+    if (need > 1 && ranOut === null) ranOut = a;
+    row.spend = spend; row.income = inc; row.fromSavings = got; row.short = Math.max(0, need);
+    if (a === R) rows[rows.length - 1] = row; else rows.push(row);
+    cash *= 1 + gC; stocks *= 1 + gS; k4 *= 1 + gK; basis /= 1 + inf;   // basis is fixed in dollars, so it shrinks in today's dollars
+  }
+  return { endAge: END, rows: rows, age0: age0, R: R, ssStart: ssStart, ranOut: ranOut, end: rows[rows.length - 1].total, spend: spend, streams: streams };
 }
 
 // One row per year; each step is 12 months from today.
@@ -875,6 +996,7 @@ var FEEDS = {
     stocks: '<path d="M5 18V9m7 9V5m7 13v-6"/><path d="M3 18h18"/>',
     accounts: '<path d="M4 19h16M6 16V9m4 7V5m4 11v-4m4 4V7"/>',
     projections: '<path d="m4 17 5-5 4 3 7-9"/><path d="M15 6h5v5"/>',
+    insights: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/>',
     k401: '<path d="M5 20V9l7-5 7 5v11M9 20v-5h6v5"/>',
@@ -885,6 +1007,7 @@ var FEEDS = {
   };
   function icon(k, cls) { return '<svg' + (cls ? ' class="' + cls + '"' : '') + ' aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ICON[k] + '</svg>'; }
 
+  var LOAN_KINDS = ['Mortgage', 'Auto', 'Student', 'Personal', 'Other'];
   var CATS = {
     stocks: { label: 'Stocks & funds', one: 'position', fields: [
       { key: 'ticker', label: 'Ticker', type: 'text', req: true },
@@ -919,8 +1042,9 @@ var FEEDS = {
       { key: 'value', label: 'Estimated value ($)', type: 'number', min: 0, req: true },
       { key: 'growth', label: 'Expected change per year (%)', type: 'number', hint: 'Use a negative number for things that lose value, such as a vehicle.' }
     ] },
-    mortgage: { label: 'Mortgage', one: 'loan', fields: [
-      { key: 'name', label: 'Loan name', type: 'text', req: true },
+    mortgage: { label: 'Loans', one: 'loan', fields: [
+      { key: 'kind', label: 'Type', type: 'select', options: LOAN_KINDS, req: true },
+      { key: 'name', label: 'Loan name', type: 'text', req: true, hint: 'For example "Home mortgage" or "Car loan".' },
       { key: 'balance', label: 'Balance owed ($)', type: 'number', min: 0, req: true },
       { key: 'rate', label: 'Interest rate (%)', type: 'number', min: 0, req: true },
       { key: 'payment', label: 'Monthly payment, principal and interest ($)', type: 'number', min: 0, req: true }
@@ -1297,7 +1421,7 @@ var FEEDS = {
   }
 
   /* ---------- rendering ---------- */
-  var VIEWS = [['overview', 'Overview'], ['stocks', 'Stocks'], ['accounts', 'Accounts'], ['projections', 'Projections'], ['settings', 'Settings']];
+  var VIEWS = [['overview', 'Overview'], ['stocks', 'Stocks'], ['accounts', 'Accounts'], ['projections', 'Projections'], ['insights', 'Insights'], ['settings', 'Settings']];
   function currentView() {
     var h = (location.hash || '').replace(/^#\/?/, '');
     return VIEWS.some(function (v) { return v[0] === h; }) ? h : 'overview';
@@ -1312,7 +1436,7 @@ var FEEDS = {
       }).join('');
     };
     $('#nav').innerHTML = navHtml(); $('#mnav').innerHTML = navHtml();
-    var body = { overview: renderOverview, stocks: renderStocks, accounts: renderAccounts, projections: renderProjections, settings: renderSettings }[view]();
+    var body = { overview: renderOverview, stocks: renderStocks, accounts: renderAccounts, projections: renderProjections, insights: renderInsights, settings: renderSettings }[view]();
     $('#main').innerHTML = renderTopline() + renderBanners() + body;
     renderSideFoot();
     document.title = 'Portfolio Studio · ' + VIEWS.filter(function (v) { return v[0] === view; })[0][1];
@@ -1380,8 +1504,9 @@ var FEEDS = {
     }
     if (k === 'assets') return list.map(function (r) { return r.name; }).slice(0, 3).join(' + ') + ' · estimated';
     if (k === 'mortgage') {
-      var m = payoffMonths(list[0]);
-      return n(list[0].rate).toFixed(2) + '% · ' + (m == null ? 'payment does not cover interest' : m === 0 ? 'paid off' : Math.floor(m / 12) + ' yr ' + (m % 12) + ' mo left');
+      var left = function (r) { var m = payoffMonths(r); return m == null ? 'payment too low' : m === 0 ? 'paid off' : m < 12 ? m + ' mo left' : Math.floor(m / 12) + ' yr ' + (m % 12 ? (m % 12) + ' mo ' : '') + 'left'; };
+      if (list.length > 2) { var soonest = list.slice().sort(function (a, b) { return n(payoffMonths(a)) - n(payoffMonths(b)); })[0]; return list.length + ' loans · next paid off: ' + soonest.name + ', ' + left(soonest); }
+      return list.map(function (r) { return r.name + ' ' + left(r); }).join(' · ');
     }
     return '';
   }
@@ -1475,13 +1600,13 @@ var FEEDS = {
     var tn = taxNow(state);
     var atLine = tn.total > 0.5 ? '<div class="at-line">' + money0(t.net - tn.total) + ' after estimated taxes<span>' + money0(tn.total) + ' would be due if you sold every stock and withdrew the 401(k) today</span></div>' : '';
     var A = t.totalAssets || 1;
-    var parts = [['Investments', t.stocks + t.k401, 'var(--c-st)'], ['Cash & CDs', t.cash + t.cds, 'var(--c-cc)'], ['Property & assets', t.assets, 'var(--c-eq)']];
+    var parts = [['Investments', t.stocks + t.k401, 'var(--c-st)'], ['Property & assets', t.assets, 'var(--c-eq)'], ['Cash & CDs', t.cash + t.cds, 'var(--c-cc)']];
     var bar = parts.map(function (p) { return '<span style="width:' + (p[1] / A * 100).toFixed(2) + '%;background:' + p[2] + '"></span>'; }).join('');
     var legend = parts.map(function (p) { return '<span class="legend-item"><i class="dot" style="--c:' + p[2] + '"></i>' + p[0] + ' ' + pct(p[1] / A * 100) + '</span>'; }).join('');
     var barLabel = 'Assets: ' + parts.map(function (p) { return p[0] + ' ' + pct(p[1] / A * 100); }).join(', ');
 
     var maxCat = Math.max.apply(null, ORDER.map(function (k) { return t[k]; }).concat([1]));
-    var colors = { stocks: 'var(--c-st)', k401: 'var(--c-k4)', cds: 'var(--c-cc)', cash: 'var(--c-cc)', assets: 'var(--c-eq)', mortgage: 'var(--neg)' };
+    var colors = { stocks: 'var(--c-st)', k401: 'var(--c-k4)', cds: 'var(--c-cc)', cash: 'var(--c-sv)', assets: 'var(--c-eq)', mortgage: 'var(--neg)' };
     var rows = ORDER.map(function (k) {
       var href = k === 'stocks' ? '#/stocks' : '#/accounts', neg = k === 'mortgage';
       return '<a class="acct-row" href="' + href + '"' + (k === 'stocks' ? '' : ' data-act="goto-tab" data-cat="' + k + '"') + '><span class="glyph">' + icon(k === 'stocks' ? 'projections' : k) + '</span>' +
@@ -1492,7 +1617,7 @@ var FEEDS = {
 
     var me = n(st.monthlyExpenses), months = n(st.reserveMonths), target = me * months, extra = t.cash - target, nextMove;
     if (!me) nextMove = '<article class="card insight"><div class="eyebrow">Cash reserve</div><div class="metric">—</div><p>Add your monthly spending in Settings to see how much cash sits above your emergency reserve.</p><a class="btn" href="#/settings">Open settings</a></article>';
-    else if (extra >= 0) nextMove = '<article class="card insight emph"><div class="eyebrow">Next move</div><div class="metric">' + money0(extra) + '</div><p>Savings and checking above your ' + months + '-month reserve of ' + money0(target) + '. This could go to investments or toward the mortgage.</p><a class="btn" href="#/projections">Test scenarios</a></article>';
+    else if (extra >= 0) nextMove = '<article class="card insight emph"><div class="eyebrow">Next move</div><div class="metric">' + money0(extra) + '</div><p>Savings and checking above your ' + months + '-month reserve of ' + money0(target) + '. This could go to investments or toward your loans.</p><a class="btn" href="#/projections">Test scenarios</a></article>';
     else nextMove = '<article class="card insight emph"><div class="eyebrow">Next move</div><div class="metric">' + money0(-extra) + '</div><p>Short of your ' + months + '-month reserve of ' + money0(target) + '. Topping up savings comes before investing more.</p><a class="btn" href="#/accounts" data-act="goto-tab" data-cat="cash">View savings</a></article>';
     var up = upcoming();
     var timeline = up.length ? '<div class="timeline">' + up.map(function (u) { return '<div class="tl"><b>' + u.t + '</b><span>' + esc(u.s) + ' · ' + u.d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) + '</span>' + (u.act ? '<div class="tl-act">' + u.act + '</div>' : '') + '</div>'; }).join('') + '</div>' : '<p>No CD maturities or payoff dates yet.</p>';
@@ -1725,6 +1850,7 @@ var FEEDS = {
     ],
     mortgage: [
       ['Loan', function (r) { return '<strong>' + esc(r.name) + '</strong>'; }],
+      ['Type', function (r) { return '<span class="muted">' + esc(r.kind || 'Mortgage') + '</span>'; }],
       ['Balance', function (r) { return '<span class="neg">' + money2(n(r.balance)) + '</span>'; }, 'num'],
       ['Rate', function (r) { return n(r.rate).toFixed(2) + '%'; }, 'num'],
       ['Monthly payment', function (r) { return money2(n(r.payment)); }, 'num'],
@@ -1737,7 +1863,7 @@ var FEEDS = {
       }]
     ]
   };
-  var TOTAL_COL = { k401: 1, cds: 3, cash: 2, assets: 1, mortgage: 1 };
+  var TOTAL_COL = { k401: 1, cds: 3, cash: 2, assets: 1, mortgage: 2 };
   var ACCT_TABS = ['k401', 'cds', 'cash', 'assets', 'mortgage'];
   function statCards(k) {
     var t = totals(state), c = function (l, v, cls) { return '<div class="card stat"><span>' + l + '</span><b class="' + (cls || '') + '">' + v + '</b></div>'; };
@@ -1747,7 +1873,7 @@ var FEEDS = {
       var me = n(state.settings.monthlyExpenses);
       return c('Total cash', money0(t.cash)) + c('Average APY', wavg(state.cash, 'balance').toFixed(2) + '%') + c('Months of spending', me ? (t.cash / me).toFixed(1) : '—');
     }
-    if (k === 'assets') return c('Total value', money0(t.assets)) + c('Equity after mortgage', money0(Math.max(0, t.assets - t.mortgage)), 'pos') + c('Items', state.assets.length);
+    if (k === 'assets') return c('Total value', money0(t.assets)) + c('Equity after loans', money0(Math.max(0, t.assets - t.mortgage)), 'pos') + c('Items', state.assets.length);
     return c('Balance owed', money0(t.mortgage), 'neg') + c('Monthly payments', money0(state.mortgage.reduce(function (a, r) { return a + n(r.payment); }, 0))) + c('Loans', state.mortgage.length);
   }
   function renderAccounts() {
@@ -1798,7 +1924,7 @@ var FEEDS = {
     rows.forEach(function (r, i) {
       var x = L + i * bw + gap / 2, w = Math.max(2, bw - gap), acc = 0, s = stacks[i];
       out += '<g><title>' + esc((i === 0 ? 'Today' : r.year) + ' · net worth ' + money0(r.net)) + '</title>';
-      [['eq', 'f-eq'], ['k4', 'f-k4'], ['st', 'f-st'], ['cc', 'f-cc']].forEach(function (c) {
+      [['eq', 'f-eq'], ['st', 'f-st'], ['k4', 'f-k4'], ['cc', 'f-cc']].forEach(function (c) {
         var v = s[c[0]]; if (v <= 0) return;
         var y1 = Y(acc + v);
         out += '<rect class="' + c[1] + '" x="' + x.toFixed(1) + '" y="' + y1.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + Math.max(0, Y(acc) - y1).toFixed(1) + '"/>';
@@ -1848,19 +1974,19 @@ var FEEDS = {
     var st = state.settings, sc = SCEN[st.scenario] || SCEN.base, t = totals(state);
     var rows = project(state).map(function (r) { return st.afterTax ? Object.assign({}, r, { stocks: r.stocks - r.taxStocks, k401: r.k401 - r.tax401, net: r.netAfter }) : r; });
     var last = rows[rows.length - 1], first = rows[0];
-    var legend = [['var(--c-eq)', 'Home & vehicle equity'], ['var(--c-k4)', '401(k)'], ['var(--c-st)', 'Stocks & funds'], ['var(--c-cc)', 'CDs & cash']].map(function (l) { return '<span><i class="dot" style="--c:' + l[0] + '"></i>' + l[1] + '</span>'; }).join('');
+    var legend = [['var(--c-eq)', 'Home & vehicle equity'], ['var(--c-st)', 'Stocks & funds'], ['var(--c-k4)', '401(k)'], ['var(--c-cc)', 'CDs & cash']].map(function (l) { return '<span><i class="dot" style="--c:' + l[0] + '"></i>' + l[1] + '</span>'; }).join('');
     var mult = first.net > 0 ? (last.net / first.net).toFixed(1) + '× today’s ' + money0(first.net) : 'from ' + money0(first.net) + ' today';
     var tr = rows.map(function (r, i) {
       var dlt = i ? r.net - rows[i - 1].net : 0;
-      return '<tr><td class="lead" data-label="When"><strong>' + (i === 0 ? 'Today' : r.year) + '</strong></td><td class="num" data-label="Stocks & funds">' + money0(r.stocks) + '</td><td class="num" data-label="401(k)">' + money0(r.k401) + '</td><td class="num" data-label="CDs & cash">' + money0(r.cds + r.cash) + '</td><td class="num" data-label="Home & vehicle">' + money0(r.assets) + '</td><td class="num neg" data-label="Mortgage">' + (r.mortgage > 0.5 ? '−' + money0(r.mortgage) : '$0') + '</td><td class="num" data-label="Net worth" style="font-weight:700">' + money0(r.net) + '</td><td class="num ' + (dlt < 0 ? 'neg' : 'pos') + '" data-label="Change">' + (i ? signed(dlt) : '—') + '</td></tr>';
+      return '<tr><td class="lead" data-label="When"><strong>' + (i === 0 ? 'Today' : r.year) + '</strong></td><td class="num" data-label="Stocks & funds">' + money0(r.stocks) + '</td><td class="num" data-label="401(k)">' + money0(r.k401) + '</td><td class="num" data-label="CDs & cash">' + money0(r.cds + r.cash) + '</td><td class="num" data-label="Home & vehicle">' + money0(r.assets) + '</td><td class="num neg" data-label="Loans">' + (r.mortgage > 0.5 ? '−' + money0(r.mortgage) : '$0') + '</td><td class="num" data-label="Net worth" style="font-weight:700">' + money0(r.net) + '</td><td class="num ' + (dlt < 0 ? 'neg' : 'pos') + '" data-label="Change">' + (i ? signed(dlt) : '—') + '</td></tr>';
     }).join('');
     return '<article class="card chart-card"><div class="chart-top"><div class="pv"><span>Projected net worth' + (st.afterTax ? ' after tax' : '') + ' in ' + last.year + (st.real ? ' · today’s dollars' : '') + '</span><b>' + money0(last.net) + '</b><span>' + esc(mult) + (st.afterTax ? '' : ' · ' + money0(last.netAfter) + ' after tax') + '</span>' + (st.afterTax && last.taxStocks + last.tax401 > 0.5 ? '<span class="pv-tax"><b>−' + money0(last.taxStocks + last.tax401) + '</b> estimated taxes if cashed out · ' + money0(last.taxStocks) + ' on stock gains, ' + money0(last.tax401) + ' on the 401(k)</span>' : '') + '</div>' +
       '<div><div class="eyebrow">' + sc.label + ' scenario</div><div class="c-legend">' + legend + '</div></div></div>' +
       '<div class="chart-scroll">' + stackedChart(rows) + '</div><p class="note">' + (st.afterTax ? 'Stocks and 401(k) are shown after the tax due if cashed out that year. ' : '') + 'Hover a column for its total. Illustrative model only; actual returns and values will vary.</p></article>' +
       '<div class="kpis"><div><span>Investments &amp; cash</span><b>' + money0(last.stocks + last.k401 + last.cds + last.cash) + '</b><small>Today ' + money0(t.investable) + '</small></div>' +
       '<div><span>Home &amp; vehicle</span><b>' + money0(last.assets) + '</b><small>Today ' + money0(t.assets) + '</small></div>' +
-      '<div><span>Mortgage left</span><b class="neg">' + (last.mortgage > 0.5 ? money0(last.mortgage) : '$0') + '</b><small>Today ' + money0(t.mortgage) + '</small></div></div>' +
-      '<section class="card panel"><div class="panel-head"><h2>Year by year</h2><button class="btn sm" data-act="proj-csv">Export as CSV</button></div><div class="tablewrap"><table class="rt" style="min-width:700px"><thead><tr><th>When</th><th class="num">Stocks &amp; funds</th><th class="num">401(k)</th><th class="num">CDs &amp; cash</th><th class="num">Home &amp; vehicle</th><th class="num">Mortgage</th><th class="num">Net worth</th><th class="num">Change</th></tr></thead><tbody>' + tr + '</tbody></table></div></section>';
+      '<div><span>Loans left</span><b class="neg">' + (last.mortgage > 0.5 ? money0(last.mortgage) : '$0') + '</b><small>Today ' + money0(t.mortgage) + '</small></div></div>' +
+      '<section class="card panel"><div class="panel-head"><h2>Year by year</h2><button class="btn sm" data-act="proj-csv">Export as CSV</button></div><div class="tablewrap"><table class="rt" style="min-width:700px"><thead><tr><th>When</th><th class="num">Stocks &amp; funds</th><th class="num">401(k)</th><th class="num">CDs &amp; cash</th><th class="num">Home &amp; vehicle</th><th class="num">Loans</th><th class="num">Net worth</th><th class="num">Change</th></tr></thead><tbody>' + tr + '</tbody></table></div></section>';
   }
 
   /* By account: one block each for stocks, 401(k), CDs and savings. */
@@ -1868,7 +1994,7 @@ var FEEDS = {
     { key: 'stocks', label: 'Stocks & funds', icon: 'projections', c: 'var(--c-st)', cum: 'cStocks', one: 'position' },
     { key: 'k401', label: '401(k)', icon: 'k401', c: 'var(--c-k4)', cum: 'cK401', one: 'account' },
     { key: 'cds', label: 'CDs', icon: 'cds', c: 'var(--c-cc)', cum: null, one: 'CD' },
-    { key: 'cash', label: 'Savings & checking', icon: 'cash', c: 'var(--c-eq)', cum: 'cCash', one: 'account' }
+    { key: 'cash', label: 'Savings & checking', icon: 'cash', c: 'var(--c-sv)', cum: 'cCash', one: 'account' }
   ];
   var MILESTONES = [1e4, 2.5e4, 5e4, 1e5, 2.5e5, 5e5, 1e6, 2e6, 5e6, 1e7, 2e7];
   // Money moving into (+) or out of (−) a block up to row r, beyond its own growth.
@@ -1984,11 +2110,11 @@ var FEEDS = {
     return '<article class="card chart-card"><div class="chart-top"><div class="pv"><span>Investments &amp; cash in ' + last.year + (st.real ? ' · today’s dollars' : '') + '</span><b>' + money0(endV) + '</b><span>From ' + money0(startV) + ' today · ' + money0(contrib) + ' contributed · ' + (growth < 0 ? money0(growth) + ' lost to inflation' : money0(growth) + ' growth and interest') + '</span></div>' +
       '<div><div class="eyebrow">' + sc.label + ' scenario</div></div></div>' + (last.taxStocks + last.tax401 > 0.5 ? '<p class="blk-tax-sum">After tax if everything were cashed out in ' + last.year + ': <b>' + money0(endV - last.taxStocks - last.tax401) + '</b></p>' : '') + '</article>' +
       '<div class="blocks">' + BLOCKS.map(function (b) { return renderBlock(b, rows); }).join('') + '</div>' +
-      '<p class="note">Each block follows the assumptions on the left. Home, vehicle and mortgage are in the Combined view. Illustrative model only; actual returns will vary.</p>';
+      '<p class="note">Each block follows the assumptions on the left. Home, vehicle and loans are in the Combined view. Illustrative model only; actual returns will vary.</p>';
   }
   function scenNote() {
     var st = state.settings, sc = SCEN[st.scenario] || SCEN.base;
-    return sc.label + ' adds ' + (sc.mkt >= 0 ? '+' : '−') + Math.abs(sc.mkt) + ' points to stock and 401(k) growth and ' + (sc.asset >= 0 ? '+' : '−') + Math.abs(sc.asset) + ' to asset growth. Savings use the accounts’ APY; ' + (st.cdMode === 'renew' ? 'CDs renew at their APY' : 'CDs earn their APY until maturity, then move to savings') + '. The mortgage follows its payment schedule. Investment fees are not included.';
+    return sc.label + ' adds ' + (sc.mkt >= 0 ? '+' : '−') + Math.abs(sc.mkt) + ' points to stock and 401(k) growth and ' + (sc.asset >= 0 ? '+' : '−') + Math.abs(sc.asset) + ' to asset growth. Savings use the accounts’ APY; ' + (st.cdMode === 'renew' ? 'CDs renew at their APY' : 'CDs earn their APY until maturity, then move to savings') + '. Loans follow their payment schedules. Investment fees are not included.';
   }
   function segBtns(act, cur, opts) {
     return opts.map(function (o) { return '<button type="button" data-act="' + act + '" data-val="' + o[0] + '" aria-pressed="' + (cur === o[0]) + '">' + o[1] + '</button>'; }).join('');
@@ -2032,6 +2158,483 @@ var FEEDS = {
     var cur = { scenario: st.scenario, cdmode: st.cdMode === 'renew' ? 'renew' : 'savings', projview: st.projView, aftertax: st.afterTax ? 'after' : 'before' };
     document.querySelectorAll('.seg [data-act]').forEach(function (b) { if (b.dataset.act in cur) b.setAttribute('aria-pressed', String(b.dataset.val === cur[b.dataset.act])); });
   }
+
+  /* ---------- insights ----------
+     Five interactive views, all in today's dollars. The what-if explorer is a sandbox: nothing changes in your saved
+     plan until you choose "Apply to my plan". Colors come from the validated categorical palette, in its slot order. */
+  var CAT = [
+    { key: 'assets', label: 'Property & assets', c: 'var(--c-eq)', on: 'var(--on-eq)' },
+    { key: 'stocks', label: 'Stocks & funds', c: 'var(--c-st)', on: 'var(--on-st)' },
+    { key: 'k401', label: '401(k)', c: 'var(--c-k4)', on: 'var(--on-k4)' },
+    { key: 'cds', label: 'CDs', c: 'var(--c-cc)', on: 'var(--on-cc)' },
+    { key: 'cash', label: 'Savings & checking', c: 'var(--c-sv)', on: 'var(--on-sv)' }
+  ];
+  function realState(over) { return Object.assign({}, state, { settings: Object.assign({}, state.settings, { real: true }, over || {}) }); }
+  function ageDate(age0, age) { var d = new Date(); d.setMonth(d.getMonth() + Math.round((age - age0) * 12)); return d; }
+  // Compact money for chart labels: full dollars under $1,000 so small changes don't read as $0K.
+  function compact(v) { return Math.abs(v) < 1000 ? money0(v) : short(v); }
+  function tipAttr(rows) { return ' data-tip="' + esc(JSON.stringify(rows)) + '"'; }
+
+  // One shared tooltip. Built with textContent, so names typed into the app are never treated as HTML.
+  var tipEl = null;
+  function showTip(rows, x, y) {
+    if (!rows || !rows.length) return;
+    if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'viz-tip'; document.body.appendChild(tipEl); }
+    tipEl.textContent = '';
+    rows.forEach(function (r, i) {
+      var line = document.createElement('div'); line.className = i === 0 ? 'vt-head' : 'vt-row';
+      if (i > 0) { var k = document.createElement('i'); if (r[2]) k.style.background = r[2]; else k.style.visibility = 'hidden'; line.appendChild(k); }
+      var lab = document.createElement('span'); lab.textContent = r[0]; line.appendChild(lab);
+      if (r[1] != null && r[1] !== '') { var v = document.createElement('b'); v.textContent = r[1]; line.appendChild(v); }
+      tipEl.appendChild(line);
+    });
+    tipEl.style.display = 'block';
+    var w = tipEl.offsetWidth, hh = tipEl.offsetHeight, px = x + 16, py = y + 16;
+    if (px + w > innerWidth - 8) px = x - w - 16;
+    if (px < 8) px = 8;
+    if (py + hh > innerHeight - 8) py = y - hh - 16;
+    if (py < 8) py = 8;
+    tipEl.style.left = px + 'px'; tipEl.style.top = py + 'px';
+  }
+  function hideTip() {
+    if (tipEl) tipEl.style.display = 'none';
+    document.querySelectorAll('.xh-line').forEach(function (l) { l.style.display = 'none'; });
+  }
+  var XH = {};   // crosshair charts: id -> { W, xs, tip(i) }
+  function xhAt(el, cx, cy) {
+    var c = XH[el.getAttribute('data-xh')]; if (!c) return;
+    var svg = el.ownerSVGElement, box = svg.getBoundingClientRect(), vx = (cx - box.left) / box.width * c.W, best = 0;
+    for (var i = 1; i < c.xs.length; i++) if (Math.abs(c.xs[i] - vx) < Math.abs(c.xs[best] - vx)) best = i;
+    var line = svg.querySelector('.xh-line');
+    if (line) { line.setAttribute('x1', c.xs[best]); line.setAttribute('x2', c.xs[best]); line.style.display = 'block'; }
+    showTip(c.tip(best), cx, cy);
+  }
+  function onPointer(e) {
+    var t = e.target.closest ? e.target : null; if (!t) return;
+    var xh = t.closest('[data-xh]'); if (xh) { xhAt(xh, e.clientX, e.clientY); return; }
+    var tip = t.closest('[data-tip]');
+    if (tip) { try { showTip(JSON.parse(tip.getAttribute('data-tip')), e.clientX, e.clientY); } catch (err) { /* ignore */ } return; }
+    if (tipEl && tipEl.style.display === 'block') hideTip();
+  }
+  document.addEventListener('pointermove', onPointer);
+  document.addEventListener('pointerdown', onPointer);
+  document.addEventListener('focusin', function (e) {
+    var tip = e.target.closest && e.target.closest('[data-tip]'); if (!tip) return;
+    var b = tip.getBoundingClientRect();
+    try { showTip(JSON.parse(tip.getAttribute('data-tip')), b.left + Math.min(b.width, 40), b.bottom); } catch (err) { /* ignore */ }
+  });
+  document.addEventListener('focusout', function (e) { if (e.target.closest && e.target.closest('[data-tip]')) hideTip(); });
+  window.addEventListener('scroll', hideTip, { passive: true });
+
+  // Line/area chart over age, with optional stacked layers, phase bands, markers and a target dot. Hover: crosshair + tooltip.
+  function ageChart(id, rows, layers, o) {
+    var nar = innerWidth < 680, W = nar ? 420 : 1000, H = nar ? Math.round((o.H || 300) * 0.9) : (o.H || 300), L = nar ? 46 : 64, R = nar ? 10 : 18, T = o.bands ? 34 : 18, B = 32;
+    var a0 = rows[0].age, a1 = rows[rows.length - 1].age;
+    var X = function (a) { return L + (a - a0) / ((a1 - a0) || 1) * (W - L - R); };
+    var tops = rows.map(function (r) { return layers.reduce(function (s, l) { return s + Math.max(0, r[l.key] || 0); }, 0); });
+    var extra = o.line ? rows.map(function (r) { return r[o.line.key] || 0; }) : [];
+    var mx = Math.max.apply(null, tops.concat(extra).concat(o.target ? [o.target.value] : []).concat([1]));
+    var step = niceStep(mx / 4), top = Math.ceil(mx / step) * step;
+    var Y = function (v) { return T + (H - T - B) * (1 - v / top); };
+    var out = '';
+    (o.bands || []).forEach(function (b, i) {
+      if (b.to <= b.from) return;
+      var x0 = X(b.from), x1 = X(b.to);
+      if (i % 2 === 1) out += '<rect class="band" x="' + x0.toFixed(1) + '" y="' + T + '" width="' + (x1 - x0).toFixed(1) + '" height="' + (H - T - B) + '"/>';
+      if (x1 - x0 > b.label.length * 6.4 + 10) out += '<text class="band-lab" x="' + (x0 + 6).toFixed(1) + '" y="' + (T - 10) + '">' + esc(b.label) + '</text>';
+    });
+    for (var g = 0; g <= top + 1; g += step) {
+      out += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(g).toFixed(1) + '" y2="' + Y(g).toFixed(1) + '"/><text class="ax" x="' + (L - 8) + '" y="' + (Y(g) + 4).toFixed(1) + '" text-anchor="end">' + short(g) + '</text>';
+    }
+    var lower = rows.map(function () { return 0; });
+    layers.forEach(function (l) {
+      var upper = rows.map(function (r, i) { return lower[i] + Math.max(0, r[l.key] || 0); });
+      var topPath = rows.map(function (r, i) { return (i ? 'L' : 'M') + X(r.age).toFixed(1) + ',' + Y(upper[i]).toFixed(1); }).join(' ');
+      var back = rows.slice().reverse().map(function (r, j) { var i = rows.length - 1 - j; return 'L' + X(r.age).toFixed(1) + ',' + Y(lower[i]).toFixed(1); }).join(' ');
+      if (layers.length === 1) {
+        out += '<path d="' + topPath + ' ' + back + ' Z" style="fill:' + l.c + ';opacity:.12"/><path d="' + topPath + '" style="fill:none;stroke:' + l.c + ';stroke-width:2;stroke-linejoin:round"/>';
+      } else {
+        out += '<path d="' + topPath + ' ' + back + ' Z" style="fill:' + l.c + '"/><path d="' + topPath + '" style="fill:none;stroke:var(--surface);stroke-width:2"/>';
+      }
+      lower = upper;
+    });
+    if (o.line) {
+      var lp = rows.map(function (r, i) { return (i ? 'L' : 'M') + X(r.age).toFixed(1) + ',' + Y(r[o.line.key] || 0).toFixed(1); }).join(' ');
+      out += '<path d="' + lp + '" style="fill:none;stroke:var(--muted);stroke-width:2;stroke-linejoin:round"/>';
+    }
+    (o.markers || []).forEach(function (m, i) {
+      if (m.age < a0 || m.age > a1) return;
+      var x = X(m.age);
+      out += '<line class="mk-line" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + T + '" y2="' + (H - B) + '"/>';
+      out += '<text class="mk-lab" x="' + (x + 5).toFixed(1) + '" y="' + (T + 14 + i * 15) + '">' + esc(m.label) + '</text>';
+    });
+    if (o.target && o.target.age >= a0 && o.target.age <= a1) {
+      var tx = X(o.target.age), ty = Y(o.target.value);
+      out += '<line class="tgt-line" x1="' + (tx - 34).toFixed(1) + '" x2="' + (tx + 34).toFixed(1) + '" y1="' + ty.toFixed(1) + '" y2="' + ty.toFixed(1) + '"/>' +
+        '<circle cx="' + tx.toFixed(1) + '" cy="' + ty.toFixed(1) + '" r="5" class="tgt-dot"/>' +
+        '<text class="mk-lab" x="' + (tx + 8).toFixed(1) + '" y="' + (ty + 20).toFixed(1) + '">' + esc(o.target.label) + '</text>';
+    }
+    var every = nar ? 10 : (Math.max(1, Math.round((a1 - a0) / 9 / 5) * 5) || 5);
+    for (var a = Math.ceil(a0 / 5) * 5; a <= a1; a += every) out += '<text class="ax" x="' + X(a).toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle">' + a + '</text>';
+    out += '<text class="ax" x="' + (L - 8) + '" y="' + (H - 10) + '" text-anchor="end">Age</text>';
+    out += '<line class="xh-line" x1="0" x2="0" y1="' + T + '" y2="' + (H - B) + '"/>';
+    out += '<rect class="xh-hit" data-xh="' + id + '" x="' + L + '" y="' + T + '" width="' + (W - L - R) + '" height="' + (H - T - B) + '"/>';
+    XH[id] = { W: W, xs: rows.map(function (r) { return X(r.age); }), tip: o.tip };
+    return '<svg class="age-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(o.aria) + '" style="width:100%;height:auto;display:block">' + out + '</svg>';
+  }
+  function legend(items) {
+    return '<div class="viz-legend">' + items.map(function (it) { return '<span><i class="' + (it.line ? 'lk-line' : 'lk-area') + '" style="--c:' + it.c + '"></i>' + esc(it.label) + '</span>'; }).join('') + '</div>';
+  }
+
+  /* 1. Retirement what-if (sandbox) */
+  function wiDefaults() {
+    var st = state.settings;
+    return { extra: 0, retire: Math.round(n(st.goalRetireAge)) || 65, claim: Math.round(n(st.ssClaimAge)) || 67, spend: Math.round(n(st.goalMonthly)), scenario: st.scenario };
+  }
+  function wiOver(w) { return { stocksContrib: n(state.settings.stocksContrib) + w.extra * 12, goalRetireAge: w.retire, ssClaimAge: w.claim, goalMonthly: w.spend, scenario: w.scenario }; }
+  function wiFmt(k, v) { return k === 'extra' ? '+' + money0(v) + ' / mo' : k === 'spend' ? money0(v) + ' / mo' : 'Age ' + v; }
+  function wiSlider(k, label, min, max, step) {
+    var v = ui.whatIf[k];
+    return '<div class="cg"><div class="cl"><label for="wi_' + k + '">' + label + '</label><b id="wiv_' + k + '">' + wiFmt(k, v) + '</b></div>' +
+      '<input type="range" id="wi_' + k + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + v + '" data-wi="' + k + '" data-fk="wi_' + k + '"></div>';
+  }
+  function leverList(w) {
+    var st = state.settings, base = goalStatus(realState(wiOver(w))), out = [];
+    var test = function (label, ch) {
+      var g = goalStatus(realState(Object.assign(wiOver(w), ch(wiOver(w)))));
+      if (g.ok) out.push({ label: label, gain: base.gap - g.gap });
+    };
+    test('Add $500 a month to investments', function (o) { return { stocksContrib: o.stocksContrib + 6000 }; });
+    test('Add $1,000 a month to investments', function (o) { return { stocksContrib: o.stocksContrib + 12000 }; });
+    test('Retire 2 years later', function (o) { return { goalRetireAge: o.goalRetireAge + 2 }; });
+    if (n(st.ssBenefit) > 0 && w.claim < 70) test('Start Social Security at 70', function () { return { ssClaimAge: 70 }; });
+    if (w.spend > 1000) test('Spend $1,000 a month less', function (o) { return { goalMonthly: o.goalMonthly - 1000 }; });
+    return { base: base, levers: out.sort(function (a, b) { return b.gain - a.gain; }) };
+  }
+  function leverChart(lv) {
+    var nar = innerWidth < 680, W = nar ? 420 : 1000, rowH = nar ? 50 : 38, L = nar ? 0 : 300, R = nar ? 120 : 190, H = lv.levers.length * rowH + 8;
+    var mx = Math.max.apply(null, lv.levers.map(function (l) { return Math.abs(l.gain); }).concat([1]));
+    var out = '';
+    lv.levers.forEach(function (l, i) {
+      var y = 4 + i * rowH + (nar ? 20 : 0), bh = nar ? 18 : 22, w = Math.max(2, Math.abs(l.gain) / mx * (W - L - R)), x0 = L;
+      var closes = lv.base.gap > 0 && l.gain >= lv.base.gap;
+      var tip = [[l.label], [lv.base.gap > 0 ? 'Closes' : 'Adds to your cushion', money0(l.gain), 'var(--div-pos)']];
+      if (lv.base.gap > 0) tip.push(['Gap left', closes ? 'None, on track' : money0(lv.base.gap - l.gain)]);
+      out += '<g class="lever" tabindex="0" role="img" aria-label="' + esc(l.label + ': ' + money0(l.gain)) + '"' + tipAttr(tip) + '>' +
+        '<rect x="0" y="' + (nar ? y - 20 : y) + '" width="' + W + '" height="' + rowH + '" fill="transparent"/>' +
+        '<text class="lever-lab" x="0" y="' + (nar ? y - 6 : y + bh / 2 + 5) + '">' + esc(l.label) + '</text>' +
+        '<path class="lever-bar" d="M' + x0 + ',' + y + ' h' + Math.max(0, w - 4).toFixed(1) + ' q4,0 4,4 v' + (bh - 8) + ' q0,4 -4,4 h-' + Math.max(0, w - 4).toFixed(1) + ' Z"/>' +
+        '<text class="lever-val" x="' + (x0 + w + 8).toFixed(1) + '" y="' + (y + bh / 2 + 5) + '">' + compact(l.gain) + (closes ? ' · closes it' : '') + '</text></g>';
+    });
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="group" aria-label="How much each change helps" style="width:100%;height:auto;display:block">' + out + '</svg>';
+  }
+  function wiOutputs() {
+    var w = ui.whatIf, sb = realState(wiOver(w)), g = goalStatus(sb);
+    if (!g.ok) return '<div class="empty">Set your current age, retirement age and retirement income in <a href="#/settings">Settings</a> first.</div>';
+    var p = lifePlan(sb), pb = lifePlan(realState());
+    var byAge = {}; pb.rows.forEach(function (r) { byAge[r.age] = r.total; });
+    var rows = p.rows.map(function (r) { return { age: r.age, year: r.year, total: r.total, base: byAge[r.age] != null ? byAge[r.age] : null }; });
+    var on = g.gap <= 0, lv = leverList(w);
+    var stats = '<div class="ins-stats"><div><span>Retirement goal at ' + w.retire + '</span><b class="' + (on ? 'pos' : 'neg') + '">' + (on ? 'On track' : 'Short ' + short(g.gap)) + '</b><em>' + money0(g.after) + ' of ' + money0(g.target) + ' needed</em></div>' +
+      '<div><span>Money lasts</span><b class="' + (p.ranOut ? 'neg' : 'pos') + '">' + (p.ranOut ? 'Until age ' + p.ranOut : 'Past ' + p.endAge) + '</b><em>' + (p.ranOut ? 'Then ' + money0(p.spend / 12) + ' a month isn’t covered' : money0(p.end) + ' left at ' + p.endAge) + '</em></div>' +
+      '<div><span>Supports in retirement</span><b>' + money0(g.incomeToday / 12) + ' / mo</b><em>Goal ' + money0(w.spend) + ' / mo at a ' + pct(g.rate * 100) + ' withdrawal rate</em></div></div>';
+    var markers = [{ age: w.retire, label: 'Retire ' + w.retire }];
+    if (p.ssStart !== null && p.ssStart !== w.retire) markers.push({ age: p.ssStart, label: 'Social Security ' + Math.round(p.ssStart) });
+    var chart = ageChart('wiChart', rows, [{ key: 'total', label: 'What-if', c: 'var(--c-eq)' }], {
+      H: 290, aria: 'Savings by age under the what-if settings, compared with your current plan', line: { key: 'base' }, markers: markers,
+      target: { age: w.retire, value: g.target, label: 'Needed ' + short(g.target) },
+      tip: function (i) {
+        var r = rows[i], t = [['Age ' + r.age + ' · ' + r.year], ['What-if', money0(r.total), 'var(--c-eq)']];
+        if (r.base != null) t.push(['Current plan', money0(r.base), 'var(--muted)']);
+        return t;
+      }
+    });
+    return stats + legend([{ label: 'What-if savings (investments and cash)', c: 'var(--c-eq)' }, { label: 'Your current plan', c: 'var(--muted)', line: true }]) + chart +
+      '<h3 class="ins-h3">What helps most</h3><p class="note" style="margin:0 0 8px">' + (g.gap > 0 ? 'How much of the ' + money0(g.gap) + ' gap each change would close, one at a time.' : 'How much extra cushion each change would add, one at a time.') + '</p>' +
+      (lv.levers.length ? leverChart(lv) : '<p class="muted">No changes to compare.</p>');
+  }
+  function insightsWhatIf() {
+    if (!ui.whatIf) ui.whatIf = wiDefaults();
+    var w = ui.whatIf, st = state.settings, age0 = Math.round(n(st.goalAge)) || 50;
+    var scen = Object.keys(SCEN).map(function (k) { return '<button type="button" data-act="wi-scen" data-val="' + k + '" aria-pressed="' + (w.scenario === k) + '">' + SCEN[k].label + '</button>'; }).join('');
+    var changed = JSON.stringify(w) !== JSON.stringify(wiDefaults());
+    return '<div class="card ins-card wi-grid"><div class="wi-controls">' +
+      wiSlider('extra', 'Add to investments', 0, 5000, 100) +
+      wiSlider('retire', 'Retire at', age0 + 1, Math.max(75, w.retire), 1) +
+      (n(st.ssBenefit) > 0 ? wiSlider('claim', 'Start Social Security at', 62, 70, 1) : '') +
+      wiSlider('spend', 'Spending in retirement', 1000, Math.max(40000, w.spend), 250) +
+      '<div class="cg"><div class="cl"><span id="wiScenLab">Markets</span></div><div class="seg" role="group" aria-labelledby="wiScenLab">' + scen + '</div></div>' +
+      '<div class="actions"><button class="btn" data-act="wi-reset"' + (changed ? '' : ' disabled') + '>Reset</button><button class="btn primary" data-act="wi-apply"' + (changed ? '' : ' disabled') + '>Apply to my plan</button></div>' +
+      '<p class="note">Try changes here freely. Your saved plan only changes when you choose Apply.</p></div>' +
+      '<div class="wi-out" id="wiOut">' + wiOutputs() + '</div></div>';
+  }
+  function refreshWhatIf() {
+    var out = $('#wiOut'); if (!out) return;
+    out.innerHTML = wiOutputs();
+    Object.keys(ui.whatIf).forEach(function (k) { var b = $('#wiv_' + k); if (b) b.textContent = wiFmt(k, ui.whatIf[k]); });
+    var changed = JSON.stringify(ui.whatIf) !== JSON.stringify(wiDefaults());
+    document.querySelectorAll('[data-act="wi-reset"],[data-act="wi-apply"]').forEach(function (b) { b.disabled = !changed; });
+    document.querySelectorAll('[data-act="wi-scen"]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.val === ui.whatIf.scenario)); });
+  }
+
+  /* 2. Will the money last? */
+  function insightsLast() {
+    var rs = realState(), g = goalStatus(rs);
+    if (!g.ok) return '<div class="card ins-card empty">Set your ages and retirement income in <a href="#/settings">Settings</a> to see this.</div>';
+    var p = lifePlan(rs), rows = p.rows, ss = p.ssStart, hasSS = ss !== null;
+    var bands = [{ from: p.age0, to: p.R, label: 'Working' }];
+    if (hasSS && ss > p.R) bands.push({ from: p.R, to: ss, label: 'Retired, before Social Security' });
+    bands.push({ from: hasSS ? Math.max(p.R, ss) : p.R, to: p.endAge, label: hasSS ? 'With Social Security' : 'Retired' });
+    var layers = [{ key: 'stocks', label: 'Stocks & funds', c: 'var(--c-st)' }, { key: 'k401', label: '401(k)', c: 'var(--c-k4)' }, { key: 'cash', label: 'Cash & CDs', c: 'var(--c-cc)' }];
+    var peak = rows.reduce(function (a, r) { return r.total > a.total ? r : a; }, rows[0]);
+    var markers = [{ age: p.R, label: 'Retire ' + p.R }];
+    if (hasSS && ss !== p.R) markers.push({ age: ss, label: 'Social Security ' + Math.round(ss) });
+    if (p.ranOut) markers.push({ age: p.ranOut, label: 'Runs out ' + p.ranOut });
+    var chart = ageChart('lastChart', rows, layers, {
+      H: 320, bands: bands, markers: markers, aria: 'Savings by account type from today to age ' + p.endAge + ', in today’s dollars',
+      tip: function (i) {
+        var r = rows[i], t = [['Age ' + r.age + ' · ' + r.year + (r.phase === 'work' ? ' · working' : r.phase === 'bridge' ? ' · before Social Security' : ' · retired')]];
+        layers.forEach(function (l) { t.push([l.label, money0(r[l.key]), l.c]); });
+        t.push(['Total', money0(r.total)]);
+        if (r.phase !== 'work') {
+          t.push(['Spending', money0(r.spend / 12) + ' / mo']);
+          if (r.income) t.push(['Guaranteed income', money0(r.income / 12) + ' / mo']);
+          t.push(['From savings', money0(r.fromSavings / 12) + ' / mo']);
+          if (r.short > 1) t.push(['Not covered', money0(r.short / 12) + ' / mo']);
+        }
+        return t;
+      }
+    });
+    var stats = '<div class="ins-stats"><div><span>Money lasts</span><b class="' + (p.ranOut ? 'neg' : 'pos') + '">' + (p.ranOut ? 'Until age ' + p.ranOut : 'Past age ' + p.endAge) + '</b><em>' + (p.ranOut ? 'Spending isn’t fully covered after that' : money0(p.end) + ' left at ' + p.endAge) + '</em></div>' +
+      '<div><span>Peak savings</span><b>' + money0(peak.total) + '</b><em>At age ' + peak.age + '</em></div>' +
+      '<div><span>Spending in retirement</span><b>' + money0(p.spend / 12) + ' / mo</b><em>' + (p.streams.length ? money0(p.streams.reduce(function (a, x) { return a + x.net; }, 0)) + ' / mo guaranteed once all income starts' : 'No guaranteed income entered') + '</em></div></div>';
+    var table = '<details class="tbl"><summary>Show as a table</summary><div class="tablewrap"><table><thead><tr><th>Age</th><th>Year</th><th class="num">Stocks</th><th class="num">401(k)</th><th class="num">Cash &amp; CDs</th><th class="num">Total</th><th class="num">From savings / yr</th><th class="num">Guaranteed / yr</th></tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr><td>' + r.age + '</td><td>' + r.year + '</td><td class="num">' + money0(r.stocks) + '</td><td class="num">' + money0(r.k401) + '</td><td class="num">' + money0(r.cash) + '</td><td class="num">' + money0(r.total) + '</td><td class="num">' + (r.phase === 'work' ? '—' : money0(r.fromSavings)) + '</td><td class="num">' + (r.income ? money0(r.income) : '—') + '</td></tr>'; }).join('') +
+      '</tbody></table></div></details>';
+    return '<div class="card ins-card">' + stats + legend(layers) + chart +
+      '<p class="note">Today’s dollars. Spending comes from cash and CDs first, then stocks (paying capital-gains tax on the gain), then the 401(k) (paying income tax). Returns follow your Projections settings and scenario; home equity isn’t used. The retirement goal uses the ' + pct(g.rate * 100) + ' rule instead, so the two can differ.</p>' + table + '</div>';
+  }
+
+  /* 3. Everything you own (treemap) */
+  function tmItems() {
+    var t = [];
+    state.assets.forEach(function (r) { t.push({ cat: 'assets', name: r.name, v: n(r.value) }); });
+    state.stocks.forEach(function (r) { if (priced(r)) { var v = n(r.qty) * n(r.price), c = n(r.qty) * n(r.cost); t.push({ cat: 'stocks', name: r.ticker, sub: r.company, v: v, gain: c ? (v - c) / c * 100 : null, gainV: v - c }); } });
+    state.k401.forEach(function (r) { t.push({ cat: 'k401', name: r.name, v: n(r.balance) }); });
+    state.cds.forEach(function (r) { t.push({ cat: 'cds', name: r.name, v: cdValueNow(r) }); });
+    state.cash.forEach(function (r) { t.push({ cat: 'cash', name: r.name, v: n(r.balance) }); });
+    return t.filter(function (x) { return x.v > 0.5; });
+  }
+  // Squarified treemap layout (Bruls et al.): rows of tiles kept as close to square as possible.
+  function squarify(items, x, y, w, h) {
+    var total = items.reduce(function (a, i) { return a + i.v; }, 0), out = [];
+    if (!total || w <= 0 || h <= 0) return out;
+    var rest = items.map(function (i) { return { it: i, a: i.v / total * w * h }; });
+    var worst = function (row, side) {
+      var s = row.reduce(function (a, r) { return a + r.a; }, 0), mx = Math.max.apply(null, row.map(function (r) { return r.a; })), mn = Math.min.apply(null, row.map(function (r) { return r.a; }));
+      return Math.max(side * side * mx / (s * s), (s * s) / (side * side * mn));
+    };
+    while (rest.length) {
+      var side = Math.min(w, h), row = [rest.shift()];
+      while (rest.length && worst(row.concat([rest[0]]), side) <= worst(row, side)) row.push(rest.shift());
+      var s = row.reduce(function (a, r) { return a + r.a; }, 0), off = 0;
+      if (w >= h) { var cw = s / h; row.forEach(function (r) { var rh = r.a / cw; out.push({ it: r.it, x: x, y: y + off, w: cw, h: rh }); off += rh; }); x += cw; w -= cw; }
+      else { var rh2 = s / w; row.forEach(function (r) { var rw = r.a / rh2; out.push({ it: r.it, x: x + off, y: y, w: rw, h: rh2 }); off += rw; }); y += rh2; h -= rh2; }
+    }
+    return out;
+  }
+  function gainFill(gp) {
+    if (gp == null) return { fill: 'var(--div-mid)', ink: 'var(--ink)' };
+    var t = Math.min(1, Math.abs(gp) / 50);
+    return { fill: 'color-mix(in srgb,' + (gp >= 0 ? 'var(--div-pos)' : 'var(--div-neg)') + ' ' + Math.round(12 + 88 * t) + '%,var(--div-mid))', ink: t > 0.55 ? '#fff' : 'var(--ink)' };
+  }
+  function insightsTreemap() {
+    var mode = ui.tmMode || 'cat', zoom = ui.tmZoom || 'all', narrow = innerWidth < 680;
+    var items = tmItems(), t = totals(state);
+    if (!items.length) return '<div class="card ins-card empty">Add accounts to see them here.</div>';
+    var cats = CAT.map(function (c) { var its = items.filter(function (i) { return i.cat === c.key; }).sort(function (a, b) { return b.v - a.v; }); return Object.assign({}, c, { items: its, total: its.reduce(function (a, i) { return a + i.v; }, 0) }); }).filter(function (c) { return c.total > 0; });
+    if (zoom !== 'all' && !cats.some(function (c) { return c.key === zoom; })) zoom = 'all';
+    var shown = zoom === 'all' ? cats : cats.filter(function (c) { return c.key === zoom; });
+    var grand = shown.reduce(function (a, c) { return a + c.total; }, 0), all = cats.reduce(function (a, c) { return a + c.total; }, 0);
+    var W = narrow ? 600 : 1000, H = narrow ? 820 : 520, fs = narrow ? 21 : 13, head = narrow ? 40 : 26, out = '', off = 0;
+    shown.forEach(function (c) {
+      var size = c.total / grand * (narrow ? H : W);
+      var sx = narrow ? 0 : off, sy = narrow ? off : 0, sw = narrow ? W : size, sh = narrow ? size : H;
+      off += size;
+      var hasHead = (narrow ? sh : sh) > head + 20 && sw > 90;
+      if (hasHead) {
+        var title = c.label + ' · ' + short(c.total);
+        var fits = title.length * fs * 0.58 < sw - 10;
+        out += '<text class="tm-head" x="' + (sx + 4).toFixed(1) + '" y="' + (sy + head * 0.68).toFixed(1) + '" style="font-size:' + fs + 'px">' + esc(fits ? title : c.label.length * fs * 0.58 < sw - 10 ? c.label : '') + '</text>';
+      }
+      var tiles = squarify(c.items, sx, sy + (hasHead ? head : 0), sw, sh - (hasHead ? head : 0));
+      tiles.forEach(function (tl) {
+        var it = tl.it, col = mode === 'gain' ? (it.cat === 'stocks' ? gainFill(it.gain) : gainFill(null)) : { fill: c.c, ink: c.on };
+        var rw = Math.max(0, tl.w - 2), rh = Math.max(0, tl.h - 2);
+        var tip = [[it.name + (it.sub ? ' · ' + it.sub : '')], [c.label, money0(it.v), c.c], ['Share of everything you own', pct(it.v / all * 100)]];
+        if (it.cat === 'stocks' && it.gain != null) tip.push(['Gain / loss', signed(it.gainV) + ' (' + sgnPct(it.gain) + ')', it.gain >= 0 ? 'var(--div-pos)' : 'var(--div-neg)']);
+        var label = '', name = it.name, val = short(it.v), lfs = Math.min(fs, Math.max(narrow ? 16 : 11, Math.min(rw, rh) / 4));
+        var line2 = val + (mode === 'gain' && it.gain != null ? ' · ' + sgnPct(it.gain) : '');
+        if (rw > Math.max(name.length, line2.length) * lfs * 0.6 + 12 && rh > lfs * 2.8) label = '<text x="' + (tl.x + 7).toFixed(1) + '" y="' + (tl.y + lfs + 6).toFixed(1) + '" style="font-size:' + lfs.toFixed(1) + 'px;font-weight:600;fill:' + col.ink + '">' + esc(name) + '</text><text x="' + (tl.x + 7).toFixed(1) + '" y="' + (tl.y + lfs * 2.25 + 6).toFixed(1) + '" style="font-size:' + (lfs * 0.92).toFixed(1) + 'px;fill:' + col.ink + '">' + val + (mode === 'gain' && it.gain != null ? ' · ' + sgnPct(it.gain) : '') + '</text>';
+        else if (rw > val.length * lfs * 0.6 + 10 && rh > lfs * 1.6) label = '<text x="' + (tl.x + 6).toFixed(1) + '" y="' + (tl.y + lfs + 4).toFixed(1) + '" style="font-size:' + lfs.toFixed(1) + 'px;fill:' + col.ink + '">' + val + '</text>';
+        out += '<g class="tm-tile" tabindex="0" role="img" aria-label="' + esc(it.name + ', ' + c.label + ', ' + money0(it.v)) + '"' + tipAttr(tip) + '><rect x="' + (tl.x + 1).toFixed(1) + '" y="' + (tl.y + 1).toFixed(1) + '" width="' + rw.toFixed(1) + '" height="' + rh.toFixed(1) + '" rx="4" style="fill:' + col.fill + '"/>' + label + '</g>';
+      });
+    });
+    var chips = '<div class="chips" role="group" aria-label="Show"><button type="button" data-act="tm-zoom" data-val="all" aria-pressed="' + (zoom === 'all') + '">Everything</button>' +
+      cats.map(function (c) { return '<button type="button" data-act="tm-zoom" data-val="' + c.key + '" aria-pressed="' + (zoom === c.key) + '">' + esc(c.label) + '</button>'; }).join('') + '</div>';
+    var modeSeg = '<div class="seg seg-range" role="group" aria-label="Color by"><button type="button" data-act="tm-mode" data-val="cat" aria-pressed="' + (mode === 'cat') + '">By type</button><button type="button" data-act="tm-mode" data-val="gain" aria-pressed="' + (mode === 'gain') + '">Gain / loss</button></div>';
+    var key = mode === 'cat'
+      ? '<div class="viz-legend">' + cats.map(function (c) { return '<span><i class="lk-area" style="--c:' + c.c + '"></i>' + esc(c.label) + ' · ' + short(c.total) + ' (' + pct(c.total / all * 100, 0) + ')</span>'; }).join('') + '</div>'
+      : '<div class="viz-legend"><span>Loss</span><i class="gain-key"></i><span>Gain (stocks, up to ±50%)</span><span><i class="lk-area" style="--c:var(--div-mid)"></i>No gain data</span></div>';
+    var table = '<details class="tbl"><summary>Show as a table</summary><div class="tablewrap"><table><thead><tr><th>Name</th><th>Type</th><th class="num">Value</th><th class="num">Share</th><th class="num">Gain</th></tr></thead><tbody>' +
+      items.slice().sort(function (a, b) { return b.v - a.v; }).map(function (it) { var c = CAT.filter(function (x) { return x.key === it.cat; })[0]; return '<tr><td>' + esc(it.name) + '</td><td>' + esc(c.label) + '</td><td class="num">' + money0(it.v) + '</td><td class="num">' + pct(it.v / all * 100) + '</td><td class="num">' + (it.gain != null ? sgnPct(it.gain) : '—') + '</td></tr>'; }).join('') +
+      '</tbody></table></div></details>';
+    return '<div class="card ins-card"><div class="ins-toolbar">' + chips + modeSeg + '</div>' + key +
+      '<svg class="tm" viewBox="0 0 ' + W + ' ' + H + '" role="group" aria-label="Everything you own, sized by value" style="width:100%;height:auto;display:block">' + out + '</svg>' +
+      '<p class="note">' + (t.mortgage > 0.5 ? 'Not shown: loans, ' + money0(-t.mortgage) + '. Net worth is ' + money0(t.net) + '. ' : '') + 'Hover or tap a block for details; use the buttons above to zoom into one type.</p>' + table + '</div>';
+  }
+
+  /* 4. Life timeline */
+  function milestones() {
+    var st = state.settings, age0 = Math.round(n(st.goalAge)) || 50, now = parseDate(today()), out = [{ age: age0, title: 'Today', sub: money0(totals(state).net) + ' net worth', kind: 'today' }];
+    var cds = state.cds.map(function (r) { var d = parseDate(r.matures); return d && d >= now ? { r: r, age: age0 + (d - now) / (365.25 * 864e5) } : null; }).filter(Boolean).sort(function (a, b) { return a.age - b.age; });
+    var groups = [];
+    cds.forEach(function (c) { var g = groups[groups.length - 1]; if (g && c.age - g[0].age < 0.5) g.push(c); else groups.push([c]); });
+    groups.forEach(function (g) {
+      var sum = g.reduce(function (a, c) { var v = cdAtMaturity(c.r); return a + (v == null ? n(c.r.principal) : v); }, 0);
+      out.push({ age: g[0].age, title: g.length === 1 ? short(sum) + ' CD matures' : g.length + ' CDs mature', sub: short(sum) + (g.length === 1 ? ' · ' + g[0].r.name : ' in total'), kind: 'cd', detail: g.map(function (c) { return c.r.name + ' · ' + fmtDate(c.r.matures); }) });
+    });
+    state.mortgage.forEach(function (r) { var m = payoffMonths(r); if (m) out.push({ age: age0 + m / 12, title: r.name + ' paid off', sub: (r.kind || 'Mortgage') + ' · ' + n(r.rate).toFixed(2) + '%', kind: 'mortgage' }); });
+    var g = goalStatus(realState());
+    if (g.ok) {
+      out.push({ age: g.age, title: 'Retire', sub: g.gap <= 0 ? 'Goal reached' : 'Short ' + short(g.gap) + ' of goal', kind: 'retire' });
+      g.streams.forEach(function (x) { out.push({ age: x.startAge, title: x.key === 'other' ? 'Other income starts' : x.key === 'spouse' ? 'Spouse’s Social Security' : 'Social Security starts', sub: money0(x.net) + ' / mo after tax', kind: 'income' }); });
+      var p = lifePlan(realState());
+      if (p.ranOut) out.push({ age: p.ranOut, title: 'Savings run out', sub: 'At current plan', kind: 'warn' });
+      else out.push({ age: p.endAge, title: 'Age ' + p.endAge, sub: money0(p.end) + ' left', kind: 'end' });
+    }
+    return { age0: age0, end: planEnd(st), items: out.filter(function (m) { return m.age >= age0 && m.age <= planEnd(st); }).sort(function (a, b) { return a.age - b.age; }) };
+  }
+  function insightsTimeline() {
+    var ms = milestones(), age0 = ms.age0, narrow = innerWidth < 680;
+    var when = function (m) { var d = ageDate(age0, m.age); return 'Age ' + Math.floor(m.age) + ' · ' + d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }); };
+    if (narrow) {
+      return '<div class="card ins-card"><div class="timeline">' + ms.items.map(function (m) {
+        return '<div class="tl tl-' + m.kind + '"><b>' + esc(m.title) + '</b><span>' + esc(when(m)) + ' · ' + esc(m.sub) + '</span></div>';
+      }).join('') + '</div></div>';
+    }
+    var W = 1000, H = 280, L = 30, R = 30, AY = 140, X = function (a) { return L + (a - age0) / ((ms.end - age0) || 1) * (W - L - R); };
+    var lanes = [{ y: 92, end: -1e9 }, { y: 196, end: -1e9 }, { y: 44, end: -1e9 }, { y: 244, end: -1e9 }], out = '';
+    out += '<line class="tl-axis" x1="' + L + '" x2="' + (W - R) + '" y1="' + AY + '" y2="' + AY + '"/>';
+    for (var a = Math.ceil(age0 / 5) * 5; a <= ms.end; a += 5) out += '<line class="tl-tick" x1="' + X(a) + '" x2="' + X(a) + '" y1="' + (AY - 4) + '" y2="' + (AY + 4) + '"/><text class="ax" x="' + X(a) + '" y="' + (AY + 18) + '" text-anchor="middle">' + a + '</text>';
+    var leads = '', labels = '';
+    ms.items.forEach(function (m) {
+      var x = X(m.age), wdt = Math.max(m.title.length * 7.2, when(m).length * 6, m.sub.length * 6) + 12;
+      var lx = Math.max(L, Math.min(W - R - wdt, x - wdt / 2));
+      var lane = lanes.filter(function (l) { return l.end < lx - 8; })[0] || lanes.slice().sort(function (p, q) { return p.end - q.end; })[0];
+      lane.end = lx + wdt;
+      var above = lane.y < AY, ty = above ? lane.y - 22 : lane.y;
+      var tip = [[m.title], [when(m), ''], [m.sub, '']].concat((m.detail || []).map(function (d) { return [d, '']; }));
+      leads += '<line class="tl-lead" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + AY + '" y2="' + (above ? ty + 30 : ty - 14) + '"/>';
+      labels += '<g class="tl-m tl-' + m.kind + '" tabindex="0" role="img" aria-label="' + esc(m.title + ', ' + when(m) + ', ' + m.sub) + '"' + tipAttr(tip) + '>' +
+        '<rect class="tl-bg" x="' + (lx - 4).toFixed(1) + '" y="' + (ty - 14) + '" width="' + (wdt + 8).toFixed(1) + '" height="46" rx="4"/>' +
+        '<text class="tl-title" x="' + lx.toFixed(1) + '" y="' + ty + '">' + esc(m.title) + '</text>' +
+        '<text class="tl-sub" x="' + lx.toFixed(1) + '" y="' + (ty + 15) + '">' + esc(when(m)) + '</text>' +
+        '<text class="tl-sub" x="' + lx.toFixed(1) + '" y="' + (ty + 29) + '">' + esc(m.sub) + '</text>' +
+        '<circle class="tl-dot" cx="' + x.toFixed(1) + '" cy="' + AY + '" r="6"/></g>';
+    });
+    out += leads + labels;
+    return '<div class="card ins-card"><svg class="tl-svg" viewBox="0 0 ' + W + ' ' + H + '" role="group" aria-label="Life timeline from today to age ' + ms.end + '" style="width:100%;height:auto;display:block">' + out + '</svg></div>';
+  }
+
+  /* 5. What changed (waterfall of the change in net worth) */
+  function insightsChanged() {
+    var r = ui.wfRange || '3m', start = rangeStart(r), td = today();
+    var hist = state.history.filter(function (e) { return e.stocks != null; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    var base = hist.filter(function (e) { return e.date >= start && e.date < td; })[0];
+    var seg = '<div class="seg seg-range" role="group" aria-label="Period">' + RANGES.map(function (x) { return '<button type="button" data-act="wf-range" data-val="' + x[0] + '" aria-pressed="' + (r === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>';
+    if (!base) {
+      var msg = !hist.length || (hist.length === 1 && hist[0].date === td)
+        ? 'This fills in as daily snapshots build up. Check back after a few days of using the app.'
+        : 'No snapshot before today in this period. Try a longer one.';
+      return '<div class="card ins-card"><div class="ins-toolbar"><span></span>' + seg + '</div><div class="empty">' + msg + '</div></div>';
+    }
+    var t = totals(state);
+    var nw = innerWidth < 680;
+    var parts = [['Stocks', t.stocks - base.stocks], ['401(k)', t.k401 - base.k401], ['CDs', t.cds - base.cds], ['Savings', t.cash - base.cash], [nw ? 'Assets' : 'Property', t.assets - base.assets], ['Loans', base.mortgage - t.mortgage]];
+    var total = t.net - base.net;
+    var nar = innerWidth < 680, W = nar ? 420 : 1000, H = 300, L = nar ? 44 : 64, R = nar ? 6 : 20, T = 30, B = 40, n2 = parts.length + 1, slot = (W - L - R) / n2, bw = nar ? 18 : 24;
+    var cum = 0, lo = 0, hi = 0;
+    parts.forEach(function (p) { cum += p[1]; lo = Math.min(lo, cum); hi = Math.max(hi, cum); });
+    lo = Math.min(lo, total, 0); hi = Math.max(hi, total, 0);
+    var span = (hi - lo) || 1, step = niceStep(span / 4), gmin = Math.floor(lo / step) * step, gmax = Math.ceil(hi / step) * step;
+    if (gmax === gmin) gmax = gmin + step;
+    var Y = function (v) { return T + (gmax - v) / (gmax - gmin) * (H - T - B); }, out = '';
+    for (var g = gmin; g <= gmax + 1e-6; g += step) out += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(g).toFixed(1) + '" y2="' + Y(g).toFixed(1) + '"/><text class="ax" x="' + (L - 8) + '" y="' + (Y(g) + 4).toFixed(1) + '" text-anchor="end">' + short(g) + '</text>';
+    out += '<line class="wf-zero" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(0).toFixed(1) + '" y2="' + Y(0).toFixed(1) + '"/>';
+    var bar = function (i, from, to, cls, label, tip) {
+      var cx = L + slot * i + slot / 2, x = cx - bw / 2, y1 = Y(Math.max(from, to)), y2 = Y(Math.min(from, to)), hgt = Math.max(1.5, y2 - y1), up = to >= from;
+      var lab = Math.abs(to - from) < 0.5 ? '$0' : (to - from < 0 ? '−' : '+') + compact(Math.abs(to - from));
+      return '<g class="wf-bar" tabindex="0" role="img" aria-label="' + esc(label + ': ' + lab) + '"' + tipAttr(tip) + '>' +
+        '<rect x="' + (cx - slot / 2 + 4).toFixed(1) + '" y="' + T + '" width="' + (slot - 8).toFixed(1) + '" height="' + (H - T - B) + '" fill="transparent"/>' +
+        '<rect class="' + cls + '" x="' + x.toFixed(1) + '" y="' + y1.toFixed(1) + '" width="' + bw + '" height="' + hgt.toFixed(1) + '" rx="3"/>' +
+        '<text class="lever-val" x="' + cx.toFixed(1) + '" y="' + (up ? y1 - 7 : y2 + 15).toFixed(1) + '" text-anchor="middle">' + lab + '</text>' +
+        '<text class="ax" x="' + cx.toFixed(1) + '" y="' + (H - 14) + '" text-anchor="middle">' + esc(label) + '</text></g>';
+    };
+    cum = 0;
+    parts.forEach(function (p, i) {
+      var from = cum, to = cum + p[1];
+      out += bar(i, from, to, p[1] >= 0 ? 'wf-up' : 'wf-down', p[0], [[p[0] === 'Loans' ? (p[1] >= 0 ? 'Loans paid down' : 'Loans grew') : p[0] === 'Assets' ? 'Property & assets' : p[0]], ['Change', signed(p[1]), p[1] >= 0 ? 'var(--div-pos)' : 'var(--div-neg)'], ['Running total', signed(to)]]);
+      if (i < parts.length) {
+        var nx = L + slot * (i + 1) + slot / 2 - bw / 2;
+        out += '<line class="wf-link" x1="' + (L + slot * i + slot / 2 + bw / 2).toFixed(1) + '" x2="' + nx.toFixed(1) + '" y1="' + Y(to).toFixed(1) + '" y2="' + Y(to).toFixed(1) + '"/>';
+      }
+      cum = to;
+    });
+    out += bar(parts.length, 0, total, 'wf-total', nar ? 'Net' : 'Net change', [['Net change'], ['From ' + fmtDate(base.date), money0(base.net)], ['Today', money0(t.net)], ['Change', signed(total)]]);
+    var head = '<div class="wf-head"><b class="' + (total < 0 ? 'neg' : 'pos') + '">' + signed(total) + (base.net ? ' (' + sgnPct(total / Math.abs(base.net) * 100) + ')' : '') + '</b><span>since ' + fmtDate(base.date) + ' · ' + money0(base.net) + ' → ' + money0(t.net) + '</span></div>';
+    return '<div class="card ins-card"><div class="ins-toolbar">' + head + seg + '</div>' +
+      '<div class="viz-legend"><span><i class="lk-area" style="--c:var(--div-pos)"></i>Increase</span><span><i class="lk-area" style="--c:var(--div-neg)"></i>Decrease</span><span><i class="lk-area" style="--c:var(--muted)"></i>Net change</span></div>' +
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" role="group" aria-label="What changed in net worth, by account type" style="width:100%;height:auto;display:block">' + out + '</svg>' +
+      '<p class="note">Changes include both money you added and market moves. Loans shows the amount paid down. Compared with your snapshot from ' + fmtDate(base.date) + '.</p></div>';
+  }
+
+  function renderInsights() {
+    return '<header class="head"><div><div class="eyebrow">Insights · today’s dollars</div><h1>See where your money is going.</h1></div></header>' +
+      '<section class="ins"><div class="section-head"><h2>Retirement what-if</h2><p>Drag the sliders to test changes. The chart and the “What helps most” bars update as you go.</p></div>' + insightsWhatIf() + '</section>' +
+      '<section class="ins"><div class="section-head"><h2>Will the money last?</h2><p>Your current plan from today to age ' + planEnd(state.settings) + ', by account type. Hover for each year.</p></div>' + insightsLast() + '</section>' +
+      '<section class="ins"><div class="section-head"><h2>Everything you own</h2><p>Each block is sized by value. Big blocks are where your money is concentrated.</p></div>' + insightsTreemap() + '</section>' +
+      '<section class="ins"><div class="section-head"><h2>Life timeline</h2><p>Milestones from today to age ' + planEnd(state.settings) + '.</p></div>' + insightsTimeline() + '</section>' +
+      '<section class="ins"><div class="section-head"><h2>What changed</h2><p>Where the change in your net worth came from.</p></div>' + insightsChanged() + '</section>';
+  }
+  var insActs = {
+    'wi-scen': function (el) { ui.whatIf.scenario = el.dataset.val; refreshWhatIf(); },
+    'wi-reset': function () { ui.whatIf = wiDefaults(); render(); },
+    'wi-apply': function () {
+      var w = ui.whatIf, d = wiDefaults(), st = state.settings, lines = [];
+      if (w.extra) lines.push('add ' + money0(w.extra) + ' a month (' + money0(w.extra * 12) + ' a year) to stock contributions');
+      if (w.retire !== d.retire) lines.push('retire at ' + w.retire);
+      if (w.claim !== d.claim && n(st.ssBenefit) > 0) lines.push('start Social Security at ' + w.claim);
+      if (w.spend !== d.spend) lines.push('retirement spending of ' + money0(w.spend) + ' a month');
+      if (w.scenario !== d.scenario) lines.push('the ' + SCEN[w.scenario].label + ' market scenario');
+      if (!lines.length || !confirm('Update your plan to ' + lines.join(', ') + '?')) return;
+      Object.assign(st, wiOver(w));
+      ui.whatIf = null; save(); render(); toast('Plan updated');
+    },
+    'tm-mode': function (el) { ui.tmMode = el.dataset.val; render(); },
+    'tm-zoom': function (el) { ui.tmZoom = el.dataset.val; render(); },
+    'wf-range': function (el) { ui.wfRange = el.dataset.val; render(); }
+  };
+  document.addEventListener('input', function (e) {
+    var k = e.target.dataset && e.target.dataset.wi; if (!k || !ui.whatIf) return;
+    ui.whatIf[k] = parseInt(e.target.value, 10);
+    refreshWhatIf();
+  });
+  var lastNarrow = innerWidth < 680, rsTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(rsTimer);
+    rsTimer = setTimeout(function () { var nw = innerWidth < 680; if (nw !== lastNarrow) { lastNarrow = nw; if (currentView() === 'insights') softRender(); } }, 200);
+  });
 
   /* ---------- settings ---------- */
   function incomeFields() {
@@ -2100,6 +2703,7 @@ var FEEDS = {
       numField('goalRetireAge', 'Retirement age', '1', '') +
       numField('goalMonthly', 'Monthly income you want in retirement, in today’s dollars ($)', '100', 'What you want to spend each month; the goal uses 12 times this a year. Taxes on 401(k) withdrawals and stock gains are already taken out of your savings before this comparison.') +
       numField('goalRate', 'Withdrawal rate (%)', '0.1', 'The share of your savings you take out each year. 4% is a common rule of thumb for about 30 years of retirement; a lower rate is safer.') +
+      numField('planAge', 'Plan until age', '1', 'How far the lifetime plan in Insights runs, from 85 to 105. 95 is a common choice; 100 adds a safety margin.') +
       incomeFields() +
       '</section>' +
       '<section class="card set-card" aria-labelledby="setTax"><h2 id="setTax">Taxes</h2><p>Used for the after-tax figures on the Overview, Stocks and Projections pages. Rough estimates, not tax advice: dividends, short-term gains, deductions and the home-sale exclusion are left out.</p>' +
@@ -2222,7 +2826,7 @@ var FEEDS = {
     state.cds.forEach(function (r) { rows.push(['CD', r.name, cdValueNow(r).toFixed(2), '', r.apy, '', '', 'Principal ' + n(r.principal).toFixed(2) + ', opened ' + r.opened + ', matures ' + r.matures]); });
     state.cash.forEach(function (r) { rows.push(['Savings & checking', r.name, n(r.balance).toFixed(2), '', r.apy, '', '', '']); });
     state.assets.forEach(function (r) { rows.push(['Asset', r.name, n(r.value).toFixed(2), '', '', '', '', 'Change per year ' + n(r.growth) + '%']); });
-    state.mortgage.forEach(function (r) { rows.push(['Mortgage', r.name, (-n(r.balance)).toFixed(2), '', r.rate, '', '', 'Monthly payment ' + n(r.payment)]); });
+    state.mortgage.forEach(function (r) { rows.push(['Loan', r.name, (-n(r.balance)).toFixed(2), '', r.rate, '', '', (r.kind || 'Mortgage') + ', monthly payment ' + n(r.payment)]); });
     return toCsv(rows);
   }
   $('#importFile').addEventListener('change', function (e) {
@@ -2257,7 +2861,7 @@ var FEEDS = {
     'hist-range': function (el) { state.settings.histRange = el.dataset.val; save(); render(); },
     'hist-tax': function (el) { state.settings.histAfterTax = el.dataset.val === 'after'; save(); render(); },
     'export-history': function () {
-      var rows = [['Date', 'Net worth', 'Net worth after tax', 'Stocks & funds', '401(k)', 'CDs', 'Savings & checking', 'Property & assets', 'Mortgage', 'Saved by hand']];
+      var rows = [['Date', 'Net worth', 'Net worth after tax', 'Stocks & funds', '401(k)', 'CDs', 'Savings & checking', 'Property & assets', 'Loans', 'Saved by hand']];
       state.history.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (e) {
         rows.push([e.date, e.net, e.netAfter == null ? '' : e.netAfter, e.stocks == null ? '' : e.stocks, e.k401 == null ? '' : e.k401, e.cds == null ? '' : e.cds, e.cash == null ? '' : e.cash, e.assets == null ? '' : e.assets, e.mortgage == null ? '' : e.mortgage, e.manual ? 'yes' : '']);
       });
@@ -2328,12 +2932,12 @@ var FEEDS = {
     'import-json': function () { $('#importFile').click(); },
     'export-csv': function () { download('portfolio-accounts-' + today() + '.csv', accountsCsv(), 'text/csv'); },
     'proj-csv': function () {
-      var rows = [['Year', 'Stocks & funds', '401(k)', 'CDs & cash', 'Home & vehicle', 'Mortgage', 'Net worth', 'Est. taxes if cashed out', 'Net worth after tax']];
+      var rows = [['Year', 'Stocks & funds', '401(k)', 'CDs & cash', 'Home & vehicle', 'Loans', 'Net worth', 'Est. taxes if cashed out', 'Net worth after tax']];
       project(state).forEach(function (r) { rows.push([r.y === 0 ? 'Today' : r.year, r.stocks.toFixed(2), r.k401.toFixed(2), (r.cds + r.cash).toFixed(2), r.assets.toFixed(2), (-r.mortgage).toFixed(2), r.net.toFixed(2), (r.taxStocks + r.tax401).toFixed(2), r.netAfter.toFixed(2)]); });
       download('portfolio-projection-' + today() + '.csv', toCsv(rows), 'text/csv');
     }
   };
-  Object.assign(actions, cloudActs);
+  Object.assign(actions, cloudActs, insActs);
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-act]');
     if (!el || !actions[el.dataset.act]) return;
