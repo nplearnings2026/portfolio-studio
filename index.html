@@ -770,6 +770,28 @@ function marketOpen(date) {
   var mins = (+p.hour % 24) * 60 + +p.minute;
   return mins >= 570 && mins <= 965;
 }
+// Time of the most recent weekday 4:05 PM New York close at or before `date` (exchange holidays not included).
+// Used to take one refresh after each close, so the day's prices end on closing prices.
+function lastClose(date) {
+  var now = date || new Date();
+  // New York wall-clock parts and UTC offset at a given moment (handles daylight saving time).
+  var ny = function (t) {
+    var p = {};
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' })
+      .formatToParts(new Date(t)).forEach(function (x) { p[x.type] = x.value; });
+    p.off = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - Math.floor(t / 1000) * 1000;
+    return p;
+  };
+  var p = ny(now.getTime());
+  for (var k = 0; k < 8; k++) {
+    var d = new Date(Date.UTC(+p.year, +p.month - 1, +p.day - k)), wd = d.getUTCDay();
+    if (wd === 0 || wd === 6) continue;
+    var wall = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 16, 5);
+    var ts = wall - ny(wall - p.off).off;   // use that day's own offset
+    if (ts <= now.getTime()) return ts;
+  }
+  return 0;
+}
 
 /* ---------- price feeds ---------- */
 function feedErr(msg, fatal) { var e = new Error(msg); e.fatal = !!fatal; return e; }
@@ -1247,6 +1269,8 @@ var FEEDS = {
   function autoTick() {
     var f = state.feed;
     if (!f.autoMins || feedRun.running || !feedKey() || document.hidden) return;
+    // One refresh after each close (any time after 4:05 PM New York, or the next time the app opens) for closing prices.
+    if (n(f.lastRun) < lastClose()) { refreshPrices(false); return; }
     if (f.marketHoursOnly && !marketOpen()) return;
     if (Date.now() - n(f.lastRun) < f.autoMins * 60000) return;
     refreshPrices(false);
@@ -1260,7 +1284,7 @@ var FEEDS = {
     return { cls: f.autoMins && !closed ? 'live' : '', text: prov.label + (f.lastRun ? ' · refreshed ' + when(f.lastRun) : ' · not refreshed yet') + auto };
   }
   function autoLabel(m) { return m >= 60 ? (m / 60) + ' hr' : m + ' min'; }
-  var AUTO_OPTS = [0, 1, 5, 15, 30, 60];
+  var AUTO_OPTS = [0, 1, 5, 15, 30, 60, 120, 240];
   function autoSelect(id) {
     return '<select class="mini" id="' + id + '" data-feed="autoMins" data-fk="' + id + '">' + AUTO_OPTS.map(function (m) {
       return '<option value="' + m + '"' + (n(state.feed.autoMins) === m ? ' selected' : '') + '>' + (m ? 'Every ' + autoLabel(m) : 'Off') + '</option>';
@@ -2067,7 +2091,7 @@ var FEEDS = {
       '<div class="field"><label for="feedKey">API key</label><div class="inline"><input id="feedKey" type="password" autocomplete="off" spellcheck="false" value="' + esc(key) + '" placeholder="Paste your key" data-fk="feedKey"><button class="btn" data-act="toggle-key" type="button">Show</button><button class="btn" data-act="test-feed" type="button">Test</button></div>' +
       '<span class="hint"><a href="' + prov.signup + '" target="_blank" rel="noopener noreferrer">Get a free ' + esc(prov.label) + ' key</a> · takes about a minute.</span></div>' +
       '<div id="feedTest"></div>' +
-      '<div class="field"><label for="autoSettings">Refresh automatically</label>' + autoSelect('autoSettings') + '<span class="hint">Runs while this page is open and visible.</span></div>' +
+      '<div class="field"><label for="autoSettings">Refresh automatically</label>' + autoSelect('autoSettings') + '<span class="hint">Runs while this page is open and visible, and as soon as it opens if the time has passed. Also refreshes once after each 4:00 PM close for closing prices.</span></div>' +
       '<label class="check"><input type="checkbox" data-feed="marketHoursOnly" data-fk="mho"' + (f.marketHoursOnly ? ' checked' : '') + '> Only during US market hours (9:30 to 4:00 New York time, weekdays)</label>' +
       '<div class="actions">' + refreshBtn(true) + '</div></section>' +
       historyCard() +
