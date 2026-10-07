@@ -1073,10 +1073,15 @@ var FEEDS = {
     return p;
   }
   function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { toast('Could not save that setting in this browser.'); } }
-  function save() {
+  // auto = a save the app makes on its own (daily snapshot, price refresh). Only your own edits move editedAt,
+  // and editedAt is what decides which copy is newer when syncing, so an automatic save never makes stale data win.
+  function save(auto) {
     clearTimeout(saveTimer);
+    // Data saved before editedAt existed: its last save time is the best record of the last edit, so keep it.
+    if (state.meta.editedAt == null) state.meta.editedAt = n(state.meta.savedAt);
     recordSnapshot();
     state.meta.savedAt = Date.now();
+    if (!auto || ui.userPending) { state.meta.editedAt = state.meta.savedAt; ui.userPending = false; }
     try { localStorage.setItem(KEY, JSON.stringify(state)); ui.savedAt = Date.now(); }
     catch (e) { toast('Could not save on this device. Use Export to keep a copy.'); }
     cloudSaveSoon();
@@ -1093,7 +1098,15 @@ var FEEDS = {
     if (f.marketHoursOnly && !marketOpen()) return false;
     return !(f.lastRun && new Date(f.lastRun).toDateString() === new Date().toDateString());
   }
-  function canSnap() { return state.settings.autoSnap && !state.meta.sample && ORDER.some(function (k) { return state[k].length; }); }
+  // With OneDrive sync on, automatic saves wait until the first download after opening has finished.
+  function gateOpen() { return !prefs.cloud || !cloudAvailable() || cloud.firstDone; }
+  function openGate() {
+    if (cloud.firstDone) return;
+    cloud.firstDone = true;
+    if (snapDue()) { save(true); softRender(); }
+    setTimeout(autoTick, 500);
+  }
+  function canSnap() { return gateOpen() && state.settings.autoSnap && !state.meta.sample && ORDER.some(function (k) { return state[k].length; }); }
   function recordSnapshot() {
     if (!canSnap()) return;
     var d = today(), i = state.history.map(function (e) { return e.date; }).indexOf(d);
@@ -1104,7 +1117,7 @@ var FEEDS = {
   function snapDue() {
     return canSnap() && !state.history.some(function (e) { return e.date === today(); }) && !waitingForPrices();
   }
-  function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(save, 400); }
+  function saveSoon(auto) { if (!auto) ui.userPending = true; clearTimeout(saveTimer); saveTimer = setTimeout(function () { save(true); }, 400); }
   var toastTimer;
   function toast(msg) {
     var el = $('#toast');
@@ -1223,6 +1236,8 @@ var FEEDS = {
   }
 
   function itemPath() { return '/me/drive/special/approot:/' + encodeURIComponent(prefs.cloudFile || CLOUD.file); }
+  // When the copy was last edited by you. Data saved before editedAt existed falls back to its last save time.
+  function editedAt(s) { var m = s && s.meta || {}; return n(m.editedAt != null ? m.editedAt : m.savedAt); }
   function hasData(s) { return !s.meta.sample && ORDER.some(function (k) { return s[k].length; }); }
   // Reads the data file from the app folder. If portfolio-data.json isn't there but exactly one .json file is, that file is used.
   function pullRemote() {
@@ -1278,7 +1293,7 @@ var FEEDS = {
       var r = remote.data;
       if (remote.item.eTag === prefs.cloudETag && !cloud.dirty) return null;
       prefs.cloudETag = remote.item.eTag; savePrefs();
-      if (!hasData(state) || n(r.meta && r.meta.savedAt) > n(state.meta.savedAt)) {
+      if (!hasData(state) || editedAt(r) > editedAt(state)) {
         var before = (r.history || []).length;
         adoptRemote(r); adopted = true;
         cloud.dirty = false;
@@ -1296,6 +1311,7 @@ var FEEDS = {
       else { cloud.status = 'error'; cloud.error = (e && e.message) || 'Unknown error'; }
     }).then(function () {
       syncing = null;
+      openGate();
       paintSaveStatus();
       if (adopted) softRender(); else if (cloud.status !== 'synced' || currentView() === 'settings') softRender();
       if (cloud.again && cloud.again < 3) { cloud.again += 1; return cloudSync(); }
@@ -1315,9 +1331,9 @@ var FEEDS = {
     }, 2000);
   }
   function initCloud() {
-    if (!cloudAvailable()) return;
+    if (!cloudAvailable()) { openGate(); return; }
     handleRedirect().then(function (justSignedIn) {
-      if (!prefs.cloud) { softRender(); return; }
+      if (!prefs.cloud) { openGate(); softRender(); return; }
       var a = loadAuth(), expired = !a || !(a.refreshExp - 60000 > Date.now());
       var tried = false; try { tried = sessionStorage.getItem('ps-silent') === '1'; } catch (e) { /* ignore */ }
       // A day after sign-in the refresh token ends; quietly reuse the Microsoft session once per visit.
@@ -1325,7 +1341,7 @@ var FEEDS = {
         try { sessionStorage.setItem('ps-silent', '1'); } catch (e) { /* ignore */ }
         signIn(true); return;
       }
-      if (expired && !justSignedIn) { cloud.status = 'signin'; paintSaveStatus(); softRender(); return; }
+      if (expired && !justSignedIn) { cloud.status = 'signin'; openGate(); paintSaveStatus(); softRender(); return; }
       try { sessionStorage.removeItem('ps-silent'); } catch (e) { /* ignore */ }
       return cloudSync();
     });
@@ -1376,14 +1392,14 @@ var FEEDS = {
         if (err.fatal) feedRun.fatal = err.message;
       }).then(function () {
         feedRun.done++;
-        saveSoon(); paintLive(); softRender();
+        saveSoon(true); paintLive(); softRender();
         if (i < list.length && !feedRun.fatal) setTimeout(next, prov.gap); else finish();
       });
     }
     function finish() {
       feedRun.running = false;
       state.feed.lastRun = Date.now();
-      save(); paintLive(); softRender();
+      save(true); paintLive(); softRender();
       var ok = feedRun.done - feedRun.failed;
       if (feedRun.fatal) toast('Stopped after ' + ok + ' of ' + feedRun.total + ': ' + feedRun.fatal);
       else if (manual || feedRun.failed) toast('Updated ' + ok + ' of ' + feedRun.total + ' prices' + (feedRun.failed ? ' · ' + feedRun.failed + ' could not be priced' : ''));
@@ -1392,7 +1408,7 @@ var FEEDS = {
   }
   function autoTick() {
     var f = state.feed;
-    if (!f.autoMins || feedRun.running || !feedKey() || document.hidden) return;
+    if (!f.autoMins || feedRun.running || !feedKey() || document.hidden || !gateOpen()) return;
     // One refresh after each close (any time after 4:05 PM New York, or the next time the app opens) for closing prices.
     if (n(f.lastRun) < lastClose()) { refreshPrices(false); return; }
     if (f.marketHoursOnly && !marketOpen()) return;
@@ -2988,10 +3004,10 @@ var FEEDS = {
   window.addEventListener('storage', function (e) {
     if (e.key === KEY && e.newValue) { try { state = normalize(JSON.parse(e.newValue)); softRender(); } catch (err) { /* ignore */ } }
   });
-  setInterval(function () { autoTick(); paintLive(); if (snapDue()) { save(); softRender(); } }, 30000);
+  setInterval(function () { autoTick(); paintLive(); if (snapDue()) { save(true); softRender(); } }, 30000);
 
-  if (state.meta.migrated) save();
-  if (snapDue()) save();
+  if (state.meta.migrated) save(true);
+  if (snapDue()) save(true);
   render();
   initCloud();
   if ('serviceWorker' in navigator && cloudAvailable()) navigator.serviceWorker.register('sw.js').catch(function () { /* offline cache is optional */ });
