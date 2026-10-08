@@ -77,8 +77,11 @@ a{color:inherit}
 main{min-width:0;padding:28px clamp(16px,4vw,64px) 64px}
 .wrap{max-width:1320px;margin:0 auto}
 .topline{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 18px;margin-bottom:30px}
-.flag{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:12px;font-weight:600}
-.flag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.flag{display:inline-flex;align-items:center;gap:9px;color:var(--muted);font-size:12px;font-weight:600;padding:6px 12px 6px 10px;border-radius:999px;background:color-mix(in srgb,var(--c,var(--accent)) 13%,transparent);border:1px solid color-mix(in srgb,var(--c,var(--accent)) 35%,transparent)}
+.flag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--c);box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 22%,transparent)}
+.flag b{color:var(--ink)}
+.flag.real{--c:var(--pos)} .flag.sample{--c:var(--c-cc);text-decoration:none}
+a.flag.sample:hover b{text-decoration:underline}
 .chip{font-family:var(--mono);color:var(--muted);font-size:11px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
 .chip.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--pos);margin-right:7px;vertical-align:1px}
 .chip.busy::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:7px;vertical-align:1px;animation:pulse 1s infinite alternate}
@@ -1071,7 +1074,7 @@ var FEEDS = {
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.10.07', APP_BUILD = 2026100704;
+  var APP_VERSION = '2026.10.07', APP_BUILD = 2026100706;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -1518,13 +1521,30 @@ var FEEDS = {
   var cloudActs = {
     'cloud-signin': function () { try { sessionStorage.removeItem('ps-silent'); } catch (e) { /* ignore */ } signIn(false); },
     'cloud-sync': function () { cloudSync().then(function () { if (cloud.status === 'synced') toast('Synced with OneDrive'); }); },
+    // Signing out uploads anything not yet in OneDrive, then removes your data from this device.
     'cloud-signout': function () {
-      if (!confirm('Stop syncing this device with OneDrive? Your data stays on this device and in OneDrive.')) return;
-      prefs.cloud = false; prefs.cloudETag = null; prefs.cloudBase = null; prefs.cloudBackupDay = null; savePrefs(); storeAuth(null);
-      cloud = { status: 'off', at: null, error: '', dirty: false, again: 0 };
-      render(); toast('Signed out of OneDrive on this device');
+      if (!confirm('Sign out on this device?\n\nYour latest changes are uploaded to OneDrive first. Then your accounts, net worth history and backups are removed from this device, and it shows sample data. Signing in again brings everything back. Price-feed keys stay.')) return;
+      if (ui.saveQueued) save(true);
+      clearTimeout(cloudTimer);
+      var mine = hasData(state);
+      if (mine) toast('Uploading your latest changes…');
+      (mine ? cloudSync() : Promise.resolve()).then(function () {
+        if (mine && (cloud.status !== 'synced' || cloud.dirty) &&
+          !confirm('Could not finish syncing with OneDrive (' + saveText() + ').\n\nChanges made on this device since its last sync are not in OneDrive and would be lost. Sign out and remove the data from this device anyway?')) return;
+        signOutHere();
+      });
     }
   };
+  function signOutHere() {
+    clearTimeout(saveTimer); clearTimeout(cloudTimer);
+    prefs.cloud = false; prefs.cloudETag = null; prefs.cloudBase = null; prefs.cloudBackupDay = null; prefs.cloudFile = null; savePrefs(); storeAuth(null);
+    try { [KEY, OLD_KEY, BACKUP_KEY].forEach(function (k) { localStorage.removeItem(k); }); sessionStorage.removeItem('ps-silent'); } catch (e) { /* private mode */ }
+    cloud = { status: 'off', at: null, error: '', dirty: false, again: 0 };
+    var feed = state.feed;
+    state = seed(); state.feed = feed;
+    outdated = false; ui.savedAt = null; ui.userPending = false; ui.saveQueued = false; ui.cloudBackups = null;
+    render(); toast('Signed out. Your data was removed from this device and is safe in OneDrive.');
+  }
 
   /* ---------- live prices ---------- */
   function feedKey() { return (prefs.keys[state.feed.provider] || '').trim(); }
@@ -1674,14 +1694,16 @@ var FEEDS = {
 
   function renderTopline() {
     var s = feedStatus();
-    return '<div class="topline"><div class="flag">' + (state.meta.sample ? 'Sample data · not financial advice' : 'Not financial advice') + '</div>' +
+    // Which data is on screen: green for yours, amber for the made-up sample (links to Settings, where you switch or sign in).
+    var flag = state.meta.sample
+      ? '<a class="flag sample" href="#/settings" title="Made-up data. Switch back or sign in to OneDrive under Settings."><b>Sample data</b> · made up · not financial advice</a>'
+      : '<div class="flag real"><b>Your data</b> · not financial advice</div>';
+    return '<div class="topline">' + flag +
       '<div class="actions"><span class="chip" data-save-status>' + esc(saveText()) + '</span><span class="chip ' + s.cls + '" data-feed-chip>' + esc(s.text) + '</span></div></div>';
   }
   function renderBanners() {
     var out = '';
-    if (ui.demo) out += '<div class="banner"><p><strong>You are looking at sample data.</strong> Everything here is made up. Your own data is safe and untouched; changes you make here aren’t saved or synced.</p><button class="btn sm primary" data-act="demo" data-val="off">Back to my data</button></div>';
-    else if (state.meta.migrated) out += '<div class="banner"><p><strong>Brought over your data from Portfolio Manager.</strong> Everything you entered there is here. Nothing was changed in the old page.</p><button class="btn sm" data-act="dismiss-migrated">Got it</button></div>';
-    else if (state.meta.sample) out += '<div class="banner"><p><strong>You are looking at sample data.</strong> Every holding and account here is made up. Edit anything, clear it and enter your own, or sign in to OneDrive in Settings to load your data.</p><span class="actions"><button class="btn sm" data-act="dismiss-banner">Keep and dismiss</button><button class="btn sm primary" data-act="clear-all">Start fresh</button></span></div>';
+    if (state.meta.migrated && !ui.demo) out += '<div class="banner"><p><strong>Brought over your data from Portfolio Manager.</strong> Everything you entered there is here. Nothing was changed in the old page.</p><button class="btn sm" data-act="dismiss-migrated">Got it</button></div>';
     if (outdated) out += '<div class="banner"><p><strong>A newer version of Portfolio Studio saved your data.</strong> This copy of the app is out of date, so it has paused saving and syncing to protect your data. Reload to update; nothing is lost.</p><button class="btn sm primary" data-act="reload">Reload</button></div>';
     if (prefs.cloud && cloud.status === 'signin') out += '<div class="banner"><p><strong>Sign in to OneDrive again.</strong> Your Microsoft sign-in has ended, so changes are saved on this device only until you sign in.</p><button class="btn sm primary" data-act="cloud-signin">Sign in</button></div>';
     if (prefs.cloud && cloud.status === 'error') out += '<div class="banner"><p><strong>Could not sync with OneDrive.</strong> ' + esc(cloud.error) + ' Changes are still saved on this device.</p><button class="btn sm" data-act="cloud-sync">Try again</button></div>';
@@ -2905,7 +2927,8 @@ var FEEDS = {
       '<p>' + (a.name || a.user ? 'Signed in as ' + esc(a.name || a.user) + (a.name && a.user ? ' (' + esc(a.user) + ')' : '') + '. ' : '') + 'File: OneDrive › Apps › Portfolio Studio › ' + esc(prefs.cloudFile || CLOUD.file) + '.</p>' +
       (cloud.missing && !hasData(state) ? '<p class="status-line bad">No data file found in OneDrive › Apps › Portfolio Studio yet. Import your data below or start entering it, and it will be uploaded there. If your file is in another folder, move it into that one.</p>' : '') +
       '<p class="hint" style="margin:0">The most recently edited copy wins, and net worth history from every device is combined. If a sync would drop items added on another device, you are asked first. Microsoft sign-in lasts about a day; after that the page signs you back in when it opens, or asks you to.</p>' +
-      '<div class="actions">' + (cloud.status === 'signin' ? '<button class="btn primary" data-act="cloud-signin">Sign in again</button>' : '<button class="btn" data-act="cloud-sync">Sync now</button>') + '<button class="btn danger" data-act="cloud-signout">Sign out on this device</button></div>';
+      '<div class="actions">' + (cloud.status === 'signin' ? '<button class="btn primary" data-act="cloud-signin">Sign in again</button>' : '<button class="btn" data-act="cloud-sync">Sync now</button>') + '<button class="btn danger" data-act="cloud-signout">Sign out on this device</button></div>' +
+      '<p class="hint" style="margin:0">Signing out uploads your latest changes, then removes your data, history and backups from this device. Your data stays in OneDrive.</p>';
   }
   function backupWhen(ts) { return new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }); }
   // portfolio-data-2026-10-07-0815.json → Oct 7, 2026, 8:15 AM
@@ -3276,6 +3299,8 @@ var FEEDS = {
   window.addEventListener('hashchange', render);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { paintLive(); autoTick(); } });
   window.addEventListener('storage', function (e) {
+    // Signed out in another tab: this tab reloads too, so it doesn't keep showing, or save back, the removed data.
+    if (e.key === KEY && e.newValue === null) { location.reload(); return; }
     if (e.key === KEY && e.newValue && !ui.demo) { try { state = normalize(JSON.parse(e.newValue)); if (newerBuild(state)) outdated = true; softRender(); } catch (err) { /* ignore */ } }
   });
   setInterval(function () { autoTick(); paintLive(); if (snapDue()) { save(true); softRender(); } }, 30000);
