@@ -424,6 +424,10 @@ details.tbl table{font-size:12px}
 .field .hint{font-size:12px;color:var(--muted)}
 .inline{display:flex;gap:8px;flex-wrap:wrap}
 .inline>input{flex:1 1 200px;min-width:0}
+.backups{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:320px;overflow:auto}
+.backups li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:9px;background:var(--surface-soft)}
+.backups li div{display:grid;gap:2px;min-width:0;font-size:13px}
+.backups li .muted{font-size:12px}
 .status-line{font-size:13px;padding:10px 12px;border-radius:9px;background:var(--surface-soft)}
 .status-line.ok{color:var(--pos)}
 .status-line.bad{color:var(--neg);background:var(--accent-soft)}
@@ -594,6 +598,8 @@ function normalize(s) {
   if (s && s.settings && s.settings.goalMonthly == null && s.settings.goalIncome != null) out.settings.goalMonthly = Math.round(n(s.settings.goalIncome) / 12);
   delete out.settings.goalIncome;
   ORDER.forEach(function (k) { out[k] = s && Array.isArray(s[k]) ? s[k] : []; });
+  // Every item needs an id: sync uses ids to tell which items are new and which were deleted.
+  ORDER.forEach(function (k) { out[k] = out[k].map(function (r) { return r && r.id ? r : Object.assign({}, r, { id: uid() }); }); });
   // Loans saved before loan types existed are mortgages.
   out.mortgage = out.mortgage.map(function (r) { return Object.assign({ kind: 'Mortgage' }, r); });
   out.stocks = out.stocks.map(function (r) {
@@ -1052,6 +1058,10 @@ var FEEDS = {
   };
 
   /* ---------- storage ---------- */
+  // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
+  // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
+  var APP_VERSION = '2026.10.07', APP_BUILD = 2026100702;
+  var outdated = false;
   var state = load();
   var prefs = loadPrefs();
   var ui = { tab: 'k401', sort: { key: 'ticker', dir: 1 }, savedAt: null, flash: {}, openYears: {} };
@@ -1060,7 +1070,7 @@ var FEEDS = {
   function load() {
     try {
       var raw = localStorage.getItem(KEY);
-      if (raw) return normalize(JSON.parse(raw));
+      if (raw) { var d = normalize(JSON.parse(raw)); if (newerBuild(d)) outdated = true; return d; }
       var old = localStorage.getItem(OLD_KEY);
       if (old) { var s = normalize(JSON.parse(old)); s.meta.migrated = true; return s; }
     } catch (e) { /* fall through to sample data */ }
@@ -1075,8 +1085,23 @@ var FEEDS = {
   function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { toast('Could not save that setting in this browser.'); } }
   // auto = a save the app makes on its own (daily snapshot, price refresh). Only your own edits move editedAt,
   // and editedAt is what decides which copy is newer when syncing, so an automatic save never makes stale data win.
+  function newerBuild(s) { return n(s && s.meta && s.meta.appBuild) > APP_BUILD; }
   function save(auto) {
     clearTimeout(saveTimer);
+    ui.saveQueued = false;
+    // Sample view: changes stay on screen only. Your own data on the device and in OneDrive is left as it is.
+    if (ui.demo) { ui.userPending = false; paintSaveStatus(); return; }
+    // An out-of-date copy of the app undoes the change instead of saving it, and says why.
+    if (outdated) {
+      if (!auto || ui.userPending) {
+        try { var raw = localStorage.getItem(KEY); if (raw) state = normalize(JSON.parse(raw)); } catch (e) { /* keep what is shown */ }
+        toast('Reload to update the app first. That change was not saved.');
+        render();
+      }
+      ui.userPending = false;
+      return;
+    }
+    state.meta.appBuild = APP_BUILD;
     // Data saved before editedAt existed: its last save time is the best record of the last edit, so keep it.
     if (state.meta.editedAt == null) state.meta.editedAt = n(state.meta.savedAt);
     recordSnapshot();
@@ -1088,6 +1113,61 @@ var FEEDS = {
     paintSaveStatus();
   }
   var saveTimer;
+
+  /* Backups on this device: a copy of your data (without net worth history, which is never lost in a sync) is kept
+     once a day and before anything replaces it, such as loading another device's copy, importing or restoring. */
+  var BACKUP_KEY = 'portfolio-studio-backups', BACKUP_KEEP = 20;
+  function loadBackups() { try { var b = JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]'); return Array.isArray(b) ? b : []; } catch (e) { return []; } }
+  // What the backup holds: items and settings, not prices' timestamps or save times, so identical data isn't kept twice.
+  function dataSig(s) { return JSON.stringify([ORDER.map(function (k) { return s[k]; }), s.settings]); }
+  function itemSummary(s) {
+    var parts = [[s.stocks.length, 'holding'], [s.k401.length, '401(k)', '401(k)s'], [s.cds.length, 'CD'], [s.cash.length, 'savings account'], [s.assets.length, 'asset'], [s.mortgage.length, 'loan']];
+    return parts.filter(function (p) { return p[0]; }).map(function (p) { return p[0] + ' ' + (p[0] === 1 ? p[1] : p[2] || p[1] + 's'); }).join(' · ') || 'No items';
+  }
+  function backupNow(reason, s) {
+    s = s || state;
+    if (!hasData(s)) return;
+    var list = loadBackups(), sig = dataSig(s);
+    if (list[0] && list[0].sig === sig) return;
+    list.unshift({ at: Date.now(), reason: reason, sum: itemSummary(s), sig: sig, data: JSON.stringify(Object.assign({}, s, { history: [] })) });
+    list = list.slice(0, BACKUP_KEEP);
+    // If the browser runs out of room, drop the oldest backups until the new one fits.
+    while (list.length) {
+      try { localStorage.setItem(BACKUP_KEY, JSON.stringify(list)); return; } catch (e) { if (list.length === 1) return; list.pop(); }
+    }
+  }
+  function dailyBackup() {
+    var list = loadBackups();
+    if (!list.some(function (b) { return new Date(b.at).toDateString() === new Date().toDateString(); })) backupNow('Daily backup');
+  }
+  // Puts a backup back. History stays as it is now, and the restore counts as your edit, so it syncs to every device.
+  function restoreData(data, label) {
+    backupNow('Before restoring ' + label);
+    var hist = state.history;
+    state = normalize(data); state.meta.sample = false; state.meta.migrated = false;
+    state.history = mergeHistory(hist, state.history);
+    save(); render(); toast('Restored ' + label);
+  }
+
+  /* Sample view: shows made-up data in place of yours, for trying things out or showing the app to someone.
+     Only what's on screen changes. Nothing is saved or synced while it's on, and a reload always opens your own data. */
+  function showSample(on) {
+    if (!!ui.demo === on) return;
+    if (on && syncing) { toast('Syncing with OneDrive. Try again in a moment.'); return; }
+    if (on) {
+      if (ui.saveQueued) save(true);
+      ui.demo = true;
+      var feed = state.feed;
+      state = seed(); state.feed = Object.assign({}, feed, { autoMins: 0 });
+    } else {
+      ui.demo = false;
+      state = load();
+      cloudSync();
+    }
+    render();
+    toast(on ? 'Showing sample data. Your own data is untouched.' : 'Back to your data');
+  }
+
   /* Automatic daily snapshots. Today's entry is created on the first save of the day and then kept up to date,
      so it ends the day holding the last numbers. Skipped for sample data. When prices refresh automatically
      during market hours, the day's first entry waits for the first refresh so it isn't recorded at yesterday's prices. */
@@ -1099,7 +1179,7 @@ var FEEDS = {
     return !(f.lastRun && new Date(f.lastRun).toDateString() === new Date().toDateString());
   }
   // With OneDrive sync on, automatic saves wait until the first download after opening has finished.
-  function gateOpen() { return !prefs.cloud || !cloudAvailable() || cloud.firstDone; }
+  function gateOpen() { return !outdated && !ui.demo && (!prefs.cloud || !cloudAvailable() || cloud.firstDone); }
   function openGate() {
     if (cloud.firstDone) return;
     cloud.firstDone = true;
@@ -1117,7 +1197,7 @@ var FEEDS = {
   function snapDue() {
     return canSnap() && !state.history.some(function (e) { return e.date === today(); }) && !waitingForPrices();
   }
-  function saveSoon(auto) { if (!auto) ui.userPending = true; clearTimeout(saveTimer); saveTimer = setTimeout(function () { save(true); }, 400); }
+  function saveSoon(auto) { if (!auto) ui.userPending = true; ui.saveQueued = true; clearTimeout(saveTimer); saveTimer = setTimeout(function () { save(true); }, 400); }
   var toastTimer;
   function toast(msg) {
     var el = $('#toast');
@@ -1133,8 +1213,9 @@ var FEEDS = {
 
   /* ---------- OneDrive sync (Microsoft Graph, app folder only) ----------
      Sign-in uses the OAuth 2.0 authorization-code flow with PKCE for single-page apps, so there is no client secret.
-     The page can only reach its own folder, OneDrive/Apps/<app name>/. The most recent save wins, and net worth
-     history from every device is combined. Sign-in tokens and API keys stay on each device. */
+     The page can only reach its own folder, OneDrive/Apps/<app name>/. The most recently edited copy wins, net worth
+     history from every device is combined, and items that would be lost are asked about first. Each device also
+     keeps a daily backup there, in backups/. Sign-in tokens and API keys stay on each device. */
   var CLOUD = {
     clientId: 'be35e1ab-34e9-4540-bbb0-d28a26f13dd9',
     authority: 'https://login.microsoftonline.com/consumers/oauth2/v2.0',
@@ -1256,30 +1337,86 @@ var FEEDS = {
       if (!item || !item['@microsoft.graph.downloadUrl']) return item ? { item: item, data: null } : null;
       return fetch(item['@microsoft.graph.downloadUrl'], { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (t) {
         var data = null; try { data = JSON.parse(t); } catch (e) { /* not JSON */ }
-        return { item: item, data: data };
+        return { item: item, data: data, text: t };
       });
     });
   }
   function pushRemote() {
+    if (outdated) return Promise.reject(outdatedErr());
+    if (ui.demo) { var d = new Error('Sample data is showing'); d.demo = true; return Promise.reject(d); }
     var headers = { 'Content-Type': 'application/json' };
     if (prefs.cloudETag) headers['If-Match'] = prefs.cloudETag;
     return graph(itemPath() + ':/content', { method: 'PUT', headers: headers, body: JSON.stringify(state, null, 2), raw: true }).then(function (r) {
       if (r.status === 412) { var c = new Error('Changed on another device'); c.conflict = true; throw c; }
       if (!r.ok) { var e = new Error('OneDrive error (' + r.status + ')'); e.status = r.status; throw e; }
       return r.json();
-    }).then(function (item) { prefs.cloudETag = item.eTag; savePrefs(); cloud.dirty = false; });
+    }).then(function (item) { prefs.cloudETag = item.eTag; prefs.cloudBase = itemIds(state); savePrefs(); cloud.dirty = false; });
+  }
+  function outdatedErr() { var e = new Error('A newer version of the app saved this data.'); e.outdated = true; return e; }
+  // The ids of every item in a copy. cloudBase holds the ids in the last copy this device and OneDrive agreed on.
+  function itemIds(s) { var out = []; ORDER.forEach(function (k) { (s[k] || []).forEach(function (r) { if (r && r.id) out.push(r.id); }); }); return out; }
+  // Items in copy a that copy b doesn't have and that weren't in the last synced copy either: they were added
+  // somewhere and haven't reached the other copy yet. Items in the last synced copy were deleted on purpose.
+  function unsyncedItems(a, b) {
+    if (!prefs.cloudBase) return [];
+    var inB = {}, base = {};
+    itemIds(b).forEach(function (id) { inB[id] = 1; });
+    prefs.cloudBase.forEach(function (id) { base[id] = 1; });
+    var out = [];
+    ORDER.forEach(function (k) { (a[k] || []).forEach(function (r) { if (r && r.id && !inB[r.id] && !base[r.id]) out.push({ cat: k, rec: r }); }); });
+    return out;
+  }
+  function itemName(x) { var r = x.rec; return CATS[x.cat].label + ': ' + (x.cat === 'stocks' ? r.ticker + (r.company ? ' (' + r.company + ')' : '') : r.name || 'Unnamed'); }
+  function addItems(s, list) { list.forEach(function (x) { s[x.cat].push(x.rec); }); }
+  function askKeep(list, adopting) {
+    var names = list.map(function (x) { return '• ' + itemName(x); }).join('\n');
+    return confirm(adopting
+      ? 'OneDrive has a newer copy from another device, but it is missing ' + (list.length === 1 ? 'this item' : 'these ' + list.length + ' items') + ' from this device:\n\n' + names + '\n\nOK keeps ' + (list.length === 1 ? 'it' : 'them') + ' and adds ' + (list.length === 1 ? 'it' : 'them') + ' to the newer copy. Cancel removes ' + (list.length === 1 ? 'it' : 'them') + ' (a backup is kept in Settings).'
+      : 'OneDrive has ' + (list.length === 1 ? 'an item' : list.length + ' items') + ' this device has never seen, probably added on another device:\n\n' + names + '\n\nOK keeps ' + (list.length === 1 ? 'it' : 'them') + '. Cancel removes ' + (list.length === 1 ? 'it' : 'them') + ' everywhere (a backup is kept in Settings).');
+  }
+
+  /* Daily OneDrive backup: the first sync of the day on each device saves the OneDrive copy as it was before anything
+     changed it, to Apps/Portfolio Studio/backups/. The newest CLOUD_KEEP backups are kept. Best effort: a failure
+     never stops a sync. */
+  var CLOUD_KEEP = 40;
+  function backupsPath() { return '/me/drive/special/approot:/backups'; }
+  function cloudBackup(text) {
+    if (prefs.cloudBackupDay === today() || !text || cloud.backingUp) return;
+    cloud.backingUp = true;
+    var d = new Date(), name = 'portfolio-data-' + today() + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '.json';
+    var put = function () { return graph(backupsPath() + '/' + encodeURIComponent(name) + ':/content', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: text }); };
+    put().catch(function (e) {
+      if (e && e.signin) throw e;
+      // The backups folder doesn't exist yet: create it and try once more.
+      return graph('/me/drive/special/approot/children', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'backups', folder: {}, '@microsoft.graph.conflictBehavior': 'fail' }) })
+        .catch(function () { /* already there */ }).then(put);
+    }).then(function () {
+      prefs.cloudBackupDay = today(); savePrefs();
+      return listCloudBackups().then(function (files) {
+        return Promise.all(files.slice(CLOUD_KEEP).map(function (f) { return graph('/me/drive/items/' + encodeURIComponent(f.id), { method: 'DELETE' }); }));
+      });
+    }).catch(function () { /* try again next sync */ }).then(function () { cloud.backingUp = false; });
+  }
+  // Newest first.
+  function listCloudBackups() {
+    return graph(backupsPath() + ':/children?$top=200').then(function (j) {
+      return (j && j.value || []).filter(function (f) { return f.file && /^portfolio-data-.*\.json$/.test(f.name); })
+        .sort(function (a, b) { return a.name < b.name ? 1 : -1; });
+    });
   }
   // Keeps the other copy's data as is (no new save time) but adds this device's snapshot days.
   function adoptRemote(r) {
     var localHist = state.history;
     state = normalize(r); state.meta.sample = false; state.meta.migrated = false;
     state.history = mergeHistory(state.history, localHist);
+    prefs.cloudBase = itemIds(state); savePrefs();
     try { localStorage.setItem(KEY, JSON.stringify(state)); ui.savedAt = Date.now(); } catch (e) { /* ignore */ }
   }
   var syncing = null, cloudTimer;
-  // Full sync: download, keep whichever copy was saved last, combine history, upload if this device has anything new.
+  // Full sync: download, keep whichever copy was edited last, combine history, upload if this device has anything new.
   function cloudSync() {
-    if (!prefs.cloud || !cloudAvailable()) return Promise.resolve();
+    if (!prefs.cloud || !cloudAvailable() || ui.demo) return Promise.resolve();
+    if (outdated) { cloud.status = 'outdated'; openGate(); paintSaveStatus(); return Promise.resolve(); }
     if (syncing) { cloud.again = Math.max(cloud.again, 1); return syncing; }
     cloud.status = 'syncing'; paintSaveStatus();
     var adopted = false;
@@ -1291,14 +1428,28 @@ var FEEDS = {
         return hasData(state) ? pushRemote() : null;
       }
       var r = remote.data;
+      // Saved by a newer version of the app: change nothing here or in OneDrive until this copy is reloaded.
+      if (newerBuild(r)) { outdated = true; throw outdatedErr(); }
+      cloudBackup(remote.text);
       if (remote.item.eTag === prefs.cloudETag && !cloud.dirty) return null;
       prefs.cloudETag = remote.item.eTag; savePrefs();
+      var rn = normalize(r), differs = dataSig(rn) !== dataSig(state);
       if (!hasData(state) || editedAt(r) > editedAt(state)) {
+        var lost = hasData(state) ? unsyncedItems(state, rn) : [];
+        if (differs) backupNow('This device’s copy, before loading a newer one from OneDrive');
         var before = (r.history || []).length;
         adoptRemote(r); adopted = true;
         cloud.dirty = false;
+        if (lost.length && askKeep(lost, true)) {
+          addItems(state, lost); state.meta.editedAt = state.meta.savedAt = Date.now();
+          try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+          return pushRemote();
+        }
         return state.history.length !== before ? pushRemote() : null;
       }
+      var extra = unsyncedItems(rn, state);
+      if (differs && hasData(rn)) backupNow('OneDrive’s copy, before replacing it with this device’s', rn);
+      if (extra.length && askKeep(extra, false)) { addItems(state, extra); state.meta.editedAt = Date.now(); adopted = true; }
       state.history = mergeHistory(state.history, r.history);
       try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
       return pushRemote();
@@ -1306,6 +1457,7 @@ var FEEDS = {
       cloud.status = 'synced'; cloud.at = Date.now(); if (!/not Portfolio/.test(cloud.error)) cloud.error = '';
     }, function (e) {
       if (e && e.conflict) { cloud.again += 1; cloud.status = 'syncing'; }
+      else if (e && e.outdated) cloud.status = 'outdated';
       else if (e && e.signin) cloud.status = 'signin';
       else if (e instanceof TypeError || navigator.onLine === false) cloud.status = 'offline';
       else { cloud.status = 'error'; cloud.error = (e && e.message) || 'Unknown error'; }
@@ -1314,6 +1466,7 @@ var FEEDS = {
       openGate();
       paintSaveStatus();
       if (adopted) softRender(); else if (cloud.status !== 'synced' || currentView() === 'settings') softRender();
+      if (outdated) { cloud.again = 0; return; }
       if (cloud.again && cloud.again < 3) { cloud.again += 1; return cloudSync(); }
       cloud.again = 0;
     });
@@ -1321,13 +1474,15 @@ var FEEDS = {
   }
   // After a change: upload in about 2 seconds. If OneDrive changed in the meantime, fall back to a full sync.
   function cloudSaveSoon() {
-    if (!prefs.cloud || !cloudAvailable()) return;
+    if (!prefs.cloud || !cloudAvailable() || ui.demo) return;
     cloud.dirty = true;
     clearTimeout(cloudTimer);
     cloudTimer = setTimeout(function () {
+      // Showing sample data: the change stays marked as not uploaded and goes up when you switch back.
+      if (ui.demo) return;
       if (syncing || !prefs.cloudETag) { cloudSync(); return; }
       cloud.status = 'syncing'; paintSaveStatus();
-      pushRemote().then(function () { cloud.status = 'synced'; cloud.at = Date.now(); paintSaveStatus(); }, function () { cloudSync(); });
+      pushRemote().then(function () { cloud.status = 'synced'; cloud.at = Date.now(); paintSaveStatus(); }, function () { if (!outdated) cloudSync(); });
     }, 2000);
   }
   function initCloud() {
@@ -1354,7 +1509,7 @@ var FEEDS = {
     'cloud-sync': function () { cloudSync().then(function () { if (cloud.status === 'synced') toast('Synced with OneDrive'); }); },
     'cloud-signout': function () {
       if (!confirm('Stop syncing this device with OneDrive? Your data stays on this device and in OneDrive.')) return;
-      prefs.cloud = false; prefs.cloudETag = null; savePrefs(); storeAuth(null);
+      prefs.cloud = false; prefs.cloudETag = null; prefs.cloudBase = null; prefs.cloudBackupDay = null; savePrefs(); storeAuth(null);
       cloud = { status: 'off', at: null, error: '', dirty: false, again: 0 };
       render(); toast('Signed out of OneDrive on this device');
     }
@@ -1362,6 +1517,9 @@ var FEEDS = {
 
   /* ---------- live prices ---------- */
   function feedKey() { return (prefs.keys[state.feed.provider] || '').trim(); }
+  // The other provider, tried for any symbol the main one can't price when you have saved a key for it.
+  function altProvider() { return Object.keys(FEEDS).filter(function (k) { return k !== state.feed.provider; })[0]; }
+  function altKey() { return (prefs.keys[altProvider()] || '').trim(); }
   function findStock(id) { return state.stocks.filter(function (r) { return r.id === id; })[0]; }
   function refreshPrices(manual) {
     if (feedRun.running) { if (manual) toast('Prices are already refreshing.'); return; }
@@ -1375,25 +1533,41 @@ var FEEDS = {
     feedRun = { running: true, done: 0, total: list.length, failed: 0, fatal: '' };
     state.feed.lastRun = Date.now();
     paintLive(); softRender();
-    var i = 0;
+    var i = 0, alt = FEEDS[altProvider()], akey = altKey(), retry = [], j = 0;
+    function apply(r, q, p) {
+      var rec = findStock(r.id);
+      if (!rec) return;
+      if (n(rec.price) !== q.price) ui.flash[rec.id] = true;
+      rec.price = Math.round(q.price * 10000) / 10000; rec.prevClose = q.prevClose;
+      rec.quoteTime = Date.now(); rec.quoteSource = p.label; rec.quoteError = null;
+    }
+    function fail(r, msg) { var rec = findStock(r.id); if (rec) rec.quoteError = msg; feedRun.failed++; }
+    function sym(r) { return String(r.symbol || r.ticker).trim().toUpperCase(); }
     function next() {
-      var r = list[i++], sym = String(r.symbol || r.ticker).trim().toUpperCase();
-      prov.quote(sym, key).then(function (q) {
-        var rec = findStock(r.id);
-        if (rec) {
-          if (n(rec.price) !== q.price) ui.flash[rec.id] = true;
-          rec.price = Math.round(q.price * 10000) / 10000; rec.prevClose = q.prevClose;
-          rec.quoteTime = Date.now(); rec.quoteSource = prov.label; rec.quoteError = null;
-        }
-      }, function (err) {
-        var rec = findStock(r.id);
-        if (rec) rec.quoteError = err.message;
-        feedRun.failed++;
-        if (err.fatal) feedRun.fatal = err.message;
+      var r = list[i++];
+      prov.quote(sym(r), key).then(function (q) { apply(r, q, prov); }, function (err) {
+        if (err.fatal) { fail(r, err.message); feedRun.fatal = err.message; }
+        // No quote for this symbol (for example a mutual fund on Finnhub's free plan): try the other provider afterwards.
+        else if (alt && akey) retry.push({ r: r, err: err.message });
+        else fail(r, err.message);
       }).then(function () {
         feedRun.done++;
         saveSoon(true); paintLive(); softRender();
-        if (i < list.length && !feedRun.fatal) setTimeout(next, prov.gap); else finish();
+        if (i < list.length && !feedRun.fatal) setTimeout(next, prov.gap);
+        else if (retry.length) { feedRun.total += retry.length; feedRun.backup = alt.label; paintLive(); setTimeout(nextAlt, 300); }
+        else finish();
+      });
+    }
+    // Backup provider, one symbol at a time at its own pace. A rejected key or used-up allowance stops only the backup.
+    function nextAlt() {
+      var x = retry[j++], r = x.r;
+      alt.quote(sym(r), akey).then(function (q) { apply(r, q, alt); }, function (err) {
+        fail(r, x.err + ' ' + alt.label + ': ' + err.message);
+        if (err.fatal) { retry.slice(j).forEach(function (y) { fail(y.r, y.err); feedRun.done++; }); j = retry.length; }
+      }).then(function () {
+        feedRun.done++;
+        saveSoon(true); paintLive(); softRender();
+        if (j < retry.length) setTimeout(nextAlt, alt.gap); else finish();
       });
     }
     function finish() {
@@ -1416,7 +1590,7 @@ var FEEDS = {
     refreshPrices(false);
   }
   function feedStatus() {
-    if (feedRun.running) return { cls: 'busy', text: 'Refreshing prices · ' + feedRun.done + ' of ' + feedRun.total };
+    if (feedRun.running) return { cls: 'busy', text: 'Refreshing prices · ' + feedRun.done + ' of ' + feedRun.total + (feedRun.backup ? ' · trying ' + feedRun.backup : '') };
     var prov = FEEDS[state.feed.provider] || FEEDS.finnhub;
     if (!feedKey()) return { cls: '', text: 'Live prices off · add a key in Settings' };
     var f = state.feed, closed = f.marketHoursOnly && !marketOpen();
@@ -1474,6 +1648,8 @@ var FEEDS = {
     document.querySelectorAll('[data-feed-chip]').forEach(function (el) { el.className = 'chip ' + s.cls; el.textContent = s.text; });
   }
   function saveText() {
+    if (ui.demo) return 'Sample data · changes aren’t saved';
+    if (outdated) return 'Paused · reload to update the app';
     if (prefs.cloud) {
       if (cloud.status === 'synced') return 'Synced to OneDrive · ' + when(cloud.at);
       if (cloud.status === 'syncing') return 'Syncing with OneDrive…';
@@ -1492,8 +1668,10 @@ var FEEDS = {
   }
   function renderBanners() {
     var out = '';
-    if (state.meta.migrated) out += '<div class="banner"><p><strong>Brought over your data from Portfolio Manager.</strong> Everything you entered there is here. Nothing was changed in the old page.</p><button class="btn sm" data-act="dismiss-migrated">Got it</button></div>';
+    if (ui.demo) out += '<div class="banner"><p><strong>You are looking at sample data.</strong> Everything here is made up. Your own data is safe and untouched; changes you make here aren’t saved or synced.</p><button class="btn sm primary" data-act="demo" data-val="off">Back to my data</button></div>';
+    else if (state.meta.migrated) out += '<div class="banner"><p><strong>Brought over your data from Portfolio Manager.</strong> Everything you entered there is here. Nothing was changed in the old page.</p><button class="btn sm" data-act="dismiss-migrated">Got it</button></div>';
     else if (state.meta.sample) out += '<div class="banner"><p><strong>You are looking at sample data.</strong> Every holding and account here is made up. Edit anything, clear it and enter your own, or sign in to OneDrive in Settings to load your data.</p><span class="actions"><button class="btn sm" data-act="dismiss-banner">Keep and dismiss</button><button class="btn sm primary" data-act="clear-all">Start fresh</button></span></div>';
+    if (outdated) out += '<div class="banner"><p><strong>A newer version of Portfolio Studio saved your data.</strong> This copy of the app is out of date, so it has paused saving and syncing to protect your data. Reload to update; nothing is lost.</p><button class="btn sm primary" data-act="reload">Reload</button></div>';
     if (prefs.cloud && cloud.status === 'signin') out += '<div class="banner"><p><strong>Sign in to OneDrive again.</strong> Your Microsoft sign-in has ended, so changes are saved on this device only until you sign in.</p><button class="btn sm primary" data-act="cloud-signin">Sign in</button></div>';
     if (prefs.cloud && cloud.status === 'error') out += '<div class="banner"><p><strong>Could not sync with OneDrive.</strong> ' + esc(cloud.error) + ' Changes are still saved on this device.</p><button class="btn sm" data-act="cloud-sync">Try again</button></div>';
     return out;
@@ -1501,7 +1679,7 @@ var FEEDS = {
   function renderSideFoot() {
     var t = totals(state);
     $('#sideFoot').innerHTML = '<div><div class="eyebrow">Coverage ratio</div><b>' + (t.liabilities ? (t.totalAssets / t.liabilities).toFixed(1) + '×' : 'No debt') + '</b><p>Total assets relative to what you owe.</p></div>' +
-      '<div><div class="eyebrow">Saving</div><p data-save-status>' + esc(saveText()) + '</p></div>';
+      '<div><div class="eyebrow">Saving</div><p data-save-status>' + esc(saveText()) + '</p><p class="muted">Version ' + APP_VERSION + '</p></div>';
   }
 
   /* ---------- overview ---------- */
@@ -2692,8 +2870,25 @@ var FEEDS = {
     return '<div class="status-line ' + (ok ? 'ok' : cloud.status === 'offline' ? '' : 'bad') + '">' + esc(saveText()) + '</div>' +
       '<p>' + (a.name || a.user ? 'Signed in as ' + esc(a.name || a.user) + (a.name && a.user ? ' (' + esc(a.user) + ')' : '') + '. ' : '') + 'File: OneDrive › Apps › Portfolio Studio › ' + esc(prefs.cloudFile || CLOUD.file) + '.</p>' +
       (cloud.missing && !hasData(state) ? '<p class="status-line bad">No data file found in OneDrive › Apps › Portfolio Studio yet. Import your data below or start entering it, and it will be uploaded there. If your file is in another folder, move it into that one.</p>' : '') +
-      '<p class="hint" style="margin:0">The most recent save wins, and net worth history from every device is combined. Microsoft sign-in lasts about a day; after that the page signs you back in when it opens, or asks you to.</p>' +
+      '<p class="hint" style="margin:0">The most recently edited copy wins, and net worth history from every device is combined. If a sync would drop items added on another device, you are asked first. Microsoft sign-in lasts about a day; after that the page signs you back in when it opens, or asks you to.</p>' +
       '<div class="actions">' + (cloud.status === 'signin' ? '<button class="btn primary" data-act="cloud-signin">Sign in again</button>' : '<button class="btn" data-act="cloud-sync">Sync now</button>') + '<button class="btn danger" data-act="cloud-signout">Sign out on this device</button></div>';
+  }
+  function backupWhen(ts) { return new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+  // portfolio-data-2026-10-07-0815.json → Oct 7, 2026, 8:15 AM
+  function cloudBackupWhen(name) {
+    var m = /(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})/.exec(name);
+    return m ? backupWhen(new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime()) : name;
+  }
+  function backupsCard() {
+    var list = loadBackups();
+    var rows = list.map(function (b, i) {
+      return '<li><div><b>' + esc(backupWhen(b.at)) + '</b><span class="muted">' + esc(b.reason) + ' · ' + esc(b.sum) + '</span></div><button class="btn sm" data-act="restore-local" data-i="' + i + '">Restore</button></li>';
+    }).join('');
+    return '<section class="card set-card" aria-labelledby="setBackup"><h2 id="setBackup">Backups</h2>' +
+      '<p>This device keeps up to ' + BACKUP_KEEP + ' copies of your accounts and settings: one a day, and one before anything replaces your data, such as a sync, an import, a delete or a restore. Net worth history is not part of backups and is never changed by a restore.</p>' +
+      (rows ? '<ul class="backups">' + rows + '</ul>' : '<p class="hint">No backups yet. The first one is made the next time the page opens with your data.</p>') +
+      (prefs.cloud && cloudAvailable() ? '<div class="field"><span class="lab">OneDrive backups</span><span class="hint">Each device saves the OneDrive copy once a day, before changing it, to OneDrive › Apps › Portfolio Studio › backups. The newest ' + CLOUD_KEEP + ' are kept.</span><div id="cloudBackups"><div class="actions"><button class="btn" data-act="cloud-backups">Show OneDrive backups</button></div></div></div>' : '') +
+      '<p class="hint" style="margin:0">Portfolio Studio version ' + APP_VERSION + ' (build ' + APP_BUILD + ').</p></section>';
   }
   function renderSettings() {
     var f = state.feed, prov = FEEDS[f.provider] || FEEDS.finnhub, key = prefs.keys[f.provider] || '', st = state.settings;
@@ -2702,17 +2897,22 @@ var FEEDS = {
     var themeBtns = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button type="button" data-act="theme" data-val="' + x[0] + '" aria-pressed="' + (prefs.theme === x[0]) + '">' + x[1] + '</button>'; }).join('');
     return '<header class="head"><div><div class="eyebrow">Settings</div><h1>Prices, saving, and your plan.</h1></div></header>' +
       '<div class="set-grid">' +
+      '<section class="card set-card" aria-labelledby="setShow"><h2 id="setShow">Data shown</h2><p>Switch to made-up sample data to try things out or show the app to someone without revealing your numbers. Your own data stays saved and untouched; nothing is saved or synced while sample data is showing, and the app always opens on your own data.</p>' +
+      '<div class="seg seg-view" role="group" aria-labelledby="setShow"><button type="button" data-act="demo" data-val="off" aria-pressed="' + !ui.demo + '">My data</button><button type="button" data-act="demo" data-val="on" aria-pressed="' + !!ui.demo + '">Sample data</button></div></section>' +
       '<section class="card set-card" aria-labelledby="setSave"><h2 id="setSave">Saving and sync</h2><p>Every change saves on this device automatically. OneDrive sync keeps your computer and phone in step.</p>' + fileBlock +
       '<div class="field"><span class="lab">Copies and backups</span><div class="actions"><button class="btn" data-act="export-json">Export data (JSON)</button><button class="btn" data-act="import-json">Import data</button><button class="btn" data-act="export-csv">Export accounts (CSV)</button></div></div>' +
-      '<div class="field"><span class="lab">Start over</span><div class="actions"><button class="btn danger" data-act="clear-all">Remove all data</button><button class="btn" data-act="load-sample">Load sample data</button></div></div></section>' +
+      '<div class="field"><span class="lab">Start over</span><div class="actions"><button class="btn danger" data-act="clear-all">Remove all data</button></div></div></section>' +
       '<section class="card set-card" aria-labelledby="setFeed"><h2 id="setFeed">Live price feed</h2><p>Stock and fund prices come from a market-data service that needs a free API key. The key stays on this device: it is not part of exports or OneDrive sync, and it is sent only to ' + esc(prov.label) + '.</p>' +
       '<div class="field"><label for="feedProvider">Provider</label><select id="feedProvider" data-feed="provider" data-fk="feedProvider">' + provOpts + '</select><span class="hint">' + esc(prov.note) + '</span></div>' +
       '<div class="field"><label for="feedKey">API key</label><div class="inline"><input id="feedKey" type="password" autocomplete="off" spellcheck="false" value="' + esc(key) + '" placeholder="Paste your key" data-fk="feedKey"><button class="btn" data-act="toggle-key" type="button">Show</button><button class="btn" data-act="test-feed" type="button">Test</button></div>' +
       '<span class="hint"><a href="' + prov.signup + '" target="_blank" rel="noopener noreferrer">Get a free ' + esc(prov.label) + ' key</a> · takes about a minute.</span></div>' +
+      '<div class="field"><label for="feedKey2">Backup key: ' + esc(FEEDS[altProvider()].label) + ' <span class="muted">(optional)</span></label><input id="feedKey2" type="password" autocomplete="off" spellcheck="false" value="' + esc(altKey()) + '" placeholder="Paste a key" data-fk="feedKey2">' +
+      '<span class="hint">Used only for symbols ' + esc(prov.label) + ' can’t price, such as some mutual funds. Also stays on this device. <a href="' + FEEDS[altProvider()].signup + '" target="_blank" rel="noopener noreferrer">Get a free ' + esc(FEEDS[altProvider()].label) + ' key</a>.</span></div>' +
       '<div id="feedTest"></div>' +
       '<div class="field"><label for="autoSettings">Refresh automatically</label>' + autoSelect('autoSettings') + '<span class="hint">Runs while this page is open and visible, and as soon as it opens if the time has passed. Also refreshes once after each 4:00 PM close for closing prices.</span></div>' +
       '<label class="check"><input type="checkbox" data-feed="marketHoursOnly" data-fk="mho"' + (f.marketHoursOnly ? ' checked' : '') + '> Only during US market hours (9:30 to 4:00 New York time, weekdays)</label>' +
       '<div class="actions">' + refreshBtn(true) + '</div></section>' +
+      backupsCard() +
       historyCard() +
       '<section class="card set-card" aria-labelledby="setGoal"><h2 id="setGoal">Retirement goal</h2><p>Shown on the Overview and Projections pages. Compares your investments and cash at retirement, after estimated taxes, with what you would need. Home equity is not counted.</p>' +
       numField('goalAge', 'Your current age', '1', '') +
@@ -2854,6 +3054,7 @@ var FEEDS = {
         var data = JSON.parse(rd.result);
         if (!looksValid(data)) throw new Error('shape');
         if (!confirm('Replace everything currently in this page with the contents of "' + f.name + '"?')) return;
+        backupNow('Before importing ' + f.name);
         state = normalize(data); state.meta.sample = false; state.meta.migrated = false;
         save(); render(); toast('Data imported');
       } catch (err) { toast('That file does not look like exported portfolio data.'); }
@@ -2869,7 +3070,8 @@ var FEEDS = {
     'edit': function (el) { openDialog(el.dataset.cat, el.dataset.id); },
     'dlg-delete': function () {
       var cat = dlgCtx.cat, list = state[cat], rec = list.filter(function (r) { return r.id === dlgCtx.id; })[0];
-      if (!rec || !confirm('Delete "' + (rec.ticker || rec.name) + '"? This cannot be undone.')) return;
+      if (!rec || !confirm('Delete "' + (rec.ticker || rec.name) + '"? A backup is kept in Settings.')) return;
+      backupNow('Before deleting ' + (rec.ticker || rec.name));
       state[cat] = list.filter(function (r) { return r.id !== rec.id; });
       pending = false; save(); dlg.close(); render(); toast('Deleted');
     },
@@ -2936,13 +3138,46 @@ var FEEDS = {
     'dismiss-banner': function () { state.meta.sample = false; save(); render(); },
     'dismiss-migrated': function () { state.meta.migrated = false; state.meta.sample = false; save(); render(); },
     'clear-all': function () {
-      if (!confirm('Remove every account, snapshot and setting from this page' + (prefs.cloud ? ' and from OneDrive' : '') + '? Export your data first if you want a copy.')) return;
+      if (!confirm('Remove every account, snapshot and setting from this page' + (prefs.cloud ? ' and from OneDrive' : '') + '? A backup is kept on this device in Settings.')) return;
+      backupNow('Before removing all data');
       var feed = state.feed;
       state = normalize({ feed: feed }); state.meta.sample = false; save(); render(); toast('Cleared. Add your first account to begin.');
     },
     'load-sample': function () {
       if (!confirm('Replace everything in this page with sample data?')) return;
+      backupNow('Before loading sample data');
       var feed = state.feed; state = seed(); state.feed = feed; save(); render(); toast('Sample data loaded');
+    },
+    'reload': function () { location.reload(); },
+    'demo': function (el) { showSample(el.dataset.val === 'on'); },
+    'restore-local': function (el) {
+      var b = loadBackups()[+el.dataset.i]; if (!b) return;
+      if (!confirm('Restore the backup from ' + backupWhen(b.at) + ' (' + b.sum + ')? It replaces your current accounts and settings on every synced device. Net worth history is kept. Your current data is backed up first.')) return;
+      try { restoreData(JSON.parse(b.data), 'the backup from ' + backupWhen(b.at)); } catch (e) { toast('That backup could not be read.'); }
+    },
+    'cloud-backups': function () {
+      var out = $('#cloudBackups'); if (!out) return;
+      out.innerHTML = '<p class="hint">Loading OneDrive backups…</p>';
+      listCloudBackups().then(function (files) {
+        ui.cloudBackups = files;
+        out.innerHTML = files.length ? '<ul class="backups">' + files.map(function (f, i) {
+          return '<li><div><b>' + esc(cloudBackupWhen(f.name)) + '</b><span class="muted">' + Math.max(1, Math.round(n(f.size) / 1024)) + ' KB</span></div><button class="btn sm" data-act="restore-cloud" data-i="' + i + '">Restore</button></li>';
+        }).join('') + '</ul>' : '<p class="hint">No OneDrive backups yet. The first one is saved at the next sync.</p>';
+      }, function () { out.innerHTML = '<p class="hint">Could not load the OneDrive backups. Check your connection and try again.</p>'; });
+    },
+    'restore-cloud': function (el) {
+      var f = (ui.cloudBackups || [])[+el.dataset.i]; if (!f) return;
+      var label = 'the OneDrive backup from ' + cloudBackupWhen(f.name);
+      if (!confirm('Restore ' + label + '? It replaces your current accounts and settings on every synced device. Net worth history is kept. Your current data is backed up first.')) return;
+      graph('/me/drive/items/' + encodeURIComponent(f.id)).then(function (item) {
+        return fetch(item['@microsoft.graph.downloadUrl'], { cache: 'no-store' });
+      }).then(function (r) {
+        if (!r.ok) throw new Error('download');
+        return r.json();
+      }).then(function (data) {
+        if (!looksValid(data)) throw new Error('shape');
+        restoreData(data, label);
+      }).catch(function () { toast('That backup could not be loaded.'); });
     },
     'export-json': function () { download('portfolio-data-' + today() + '.json', JSON.stringify(state, null, 2), 'application/json'); },
     'import-json': function () { $('#importFile').click(); },
@@ -2954,9 +3189,12 @@ var FEEDS = {
     }
   };
   Object.assign(actions, cloudActs, insActs);
+  // Actions that would change your real data, or the sync, wait until you switch back from sample data.
+  var REAL_ONLY = ['import-json', 'clear-all', 'load-sample', 'restore-local', 'restore-cloud', 'cloud-backups', 'cloud-sync', 'cloud-signin', 'cloud-signout', 'dismiss-banner'];
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-act]');
     if (!el || !actions[el.dataset.act]) return;
+    if (ui.demo && REAL_ONLY.indexOf(el.dataset.act) >= 0) { toast('Switch back to your data first. Sample data is showing.'); return; }
     actions[el.dataset.act](el, e);
   });
   // Live redraw of projection results while typing or dragging.
@@ -2997,15 +3235,17 @@ var FEEDS = {
       return;
     }
     if (el.id === 'feedKey') { prefs.keys[state.feed.provider] = el.value.trim(); savePrefs(); paintLive(); }
+    if (el.id === 'feedKey2') { prefs.keys[altProvider()] = el.value.trim(); savePrefs(); }
   });
   document.addEventListener('toggle', function (e) { var d = e.target; if (d.dataset && d.dataset.blk) ui.openYears[d.dataset.blk] = d.open; }, true);
   window.addEventListener('hashchange', render);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { paintLive(); autoTick(); } });
   window.addEventListener('storage', function (e) {
-    if (e.key === KEY && e.newValue) { try { state = normalize(JSON.parse(e.newValue)); softRender(); } catch (err) { /* ignore */ } }
+    if (e.key === KEY && e.newValue && !ui.demo) { try { state = normalize(JSON.parse(e.newValue)); if (newerBuild(state)) outdated = true; softRender(); } catch (err) { /* ignore */ } }
   });
   setInterval(function () { autoTick(); paintLive(); if (snapDue()) { save(true); softRender(); } }, 30000);
 
+  dailyBackup();
   if (state.meta.migrated) save(true);
   if (snapDue()) save(true);
   render();
