@@ -143,6 +143,19 @@ p{line-height:1.55}
 .insight{padding:22px}
 .insight.emph{background:var(--accent-soft);border-color:transparent}
 .insight p{color:var(--muted);font-size:13px;margin:8px 0 16px}
+.tape{display:flex;align-items:center;gap:12px;margin-top:14px;padding:0 0 0 14px;height:44px;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.tape-asof{flex:none;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.02em;white-space:nowrap}
+.tape-view{flex:1;min-width:0;overflow:hidden;height:100%;-webkit-mask-image:linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent)}
+.tape-track{display:flex;width:max-content;height:100%;animation:tape linear infinite}
+.tape:hover .tape-track,.tape:focus-within .tape-track{animation-play-state:paused}
+.tape-run{display:flex;align-items:center}
+@keyframes tape{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.tp{display:inline-flex;align-items:baseline;gap:7px;padding:0 18px;height:100%;align-items:center;white-space:nowrap;color:inherit;text-decoration:none;font-size:13px;font-variant-numeric:tabular-nums;border-right:1px solid var(--line)}
+.tp:hover b{text-decoration:underline}
+.tp-lab{font-size:11px;color:var(--muted);font-weight:600}
+.tp-px{color:var(--muted)}
+.tp .pos,.tp .neg{font-weight:700;font-size:12px}
+@media (prefers-reduced-motion: reduce){.tape-track{animation:none}.tape-dup{display:none}.tape-view{overflow-x:auto;-webkit-mask-image:none;mask-image:none}}
 .mv-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
 .mv-head .muted{font-size:12px}
 .mv-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
@@ -556,7 +569,7 @@ function defaultSettings() {
     taxCapGains: 15, taxState: 0, taxInterest: 22, taxK401: 22, afterTax: false,
     goalAge: 50, goalRetireAge: 65, goalMonthly: 14167, goalRate: 4,
     planAge: 95, ssBenefit: 0, ssClaimAge: 67, ssSpouseBenefit: 0, ssSpouseAge: 50, ssSpouseClaimAge: 67, ssCut: 0, otherIncome: 0, otherStartAge: 65,
-    autoSnap: true, histRange: 'all', histAfterTax: false };
+    autoSnap: true, histRange: 'all', histAfterTax: false, tickerMarket: true };
 }
 function defaultFeed() {
   return { provider: 'finnhub', autoMins: 0, marketHoursOnly: true, lastRun: null };
@@ -580,6 +593,7 @@ function seed() {
     settings: defaultSettings(),
     feed: defaultFeed(),
     history: [],
+    market: {},
     stocks: raw.map(function (r) {
       return { id: uid(), ticker: r[0], symbol: '', company: r[1], type: r[2], qty: r[3], cost: r[4], price: r[5],
         manual: r[5] === null, prevClose: null, quoteTime: r[5] === null ? null : snap, quoteSource: r[5] === null ? '' : 'Sample', quoteError: null };
@@ -607,7 +621,8 @@ function normalize(s) {
     meta: Object.assign({ sample: false, savedAt: 0 }, s && s.meta),
     settings: Object.assign({}, defaultSettings(), s && s.settings),
     feed: Object.assign({}, defaultFeed(), s && s.feed),
-    history: s && Array.isArray(s.history) ? s.history : []
+    history: s && Array.isArray(s.history) ? s.history : [],
+    market: s && s.market && typeof s.market === 'object' && !Array.isArray(s.market) ? s.market : {}
   };
   if (s && s.settings && s.settings.goalMonthly == null && s.settings.goalIncome != null) out.settings.goalMonthly = Math.round(n(s.settings.goalIncome) / 12);
   delete out.settings.goalIncome;
@@ -978,6 +993,8 @@ var FEEDS = {
     }
   }
 };
+// Market reference symbols shown first in the Overview ticker (Settings › Live price feed can turn them off).
+var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
 /*ENGINE_END*/
 
 (function () {
@@ -1074,7 +1091,7 @@ var FEEDS = {
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.10.07', APP_BUILD = 2026100706;
+  var APP_VERSION = '2026.10.07', APP_BUILD = 2026100707;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -1561,18 +1578,27 @@ var FEEDS = {
     }
     var list = state.stocks.filter(function (r) { return !r.manual && (r.symbol || r.ticker); });
     if (!list.length) { if (manual) toast('Nothing to refresh. Holdings marked Manual are skipped.'); return; }
+    // Market symbols for the ticker, unless you already hold them (then the holding's price is used).
+    if (state.settings.tickerMarket) MARKET.forEach(function (m) {
+      if (!list.some(function (r) { return String(r.symbol || r.ticker).toUpperCase() === m[0]; })) list.push({ id: 'mkt:' + m[0], ticker: m[0], market: true });
+    });
     feedRun = { running: true, done: 0, total: list.length, failed: 0, fatal: '' };
     state.feed.lastRun = Date.now();
     paintLive(); softRender();
     var i = 0, alt = FEEDS[altProvider()], akey = altKey(), retry = [], j = 0;
     function apply(r, q, p) {
+      if (r.market) { state.market[r.ticker] = { price: Math.round(q.price * 10000) / 10000, prevClose: q.prevClose, quoteTime: Date.now(), quoteSource: p.label }; return; }
       var rec = findStock(r.id);
       if (!rec) return;
       if (n(rec.price) !== q.price) ui.flash[rec.id] = true;
       rec.price = Math.round(q.price * 10000) / 10000; rec.prevClose = q.prevClose;
       rec.quoteTime = Date.now(); rec.quoteSource = p.label; rec.quoteError = null;
     }
-    function fail(r, msg) { var rec = findStock(r.id); if (rec) rec.quoteError = msg; feedRun.failed++; }
+    function fail(r, msg) {
+      if (r.market) state.market[r.ticker] = Object.assign({}, state.market[r.ticker], { quoteError: msg });
+      else { var rec = findStock(r.id); if (rec) rec.quoteError = msg; }
+      feedRun.failed++;
+    }
     function sym(r) { return String(r.symbol || r.ticker).trim().toUpperCase(); }
     function next() {
       var r = list[i++];
@@ -1857,6 +1883,7 @@ var FEEDS = {
       '<article class="ledger" aria-label="Net worth summary"><div><div class="eyebrow">Net worth</div><div class="big">' + money0(t.net) + '</div>' + trend + atLine + '</div>' +
       '<div class="ledger-right"><div class="bar-labels"><strong>' + money0(t.totalAssets) + ' assets</strong><span>− ' + money0(t.liabilities) + ' owed</span></div>' +
       '<div class="bal-bar" role="img" aria-label="' + esc(barLabel) + '">' + bar + '</div><div class="legend">' + legend + '</div></div></article>' +
+      tickerTape() +
       '<section class="section"><div class="section-head"><h2>Accounts at a glance</h2><p>Every part of the balance sheet, grouped by the job it does. Select a row to edit it.</p></div>' +
       '<div class="acct-layout"><div class="card acct-list">' + rows + '</div><div class="stack">' + moversCard() + goalMini() +
       '<article class="card insight"><h3>Coming up</h3>' + timeline + '</article>' + nextMove + '</div></div></section>' +
@@ -2186,6 +2213,43 @@ var FEEDS = {
     return '<p>Guaranteed income after tax: ' + parts.join(', ') + '. Savings need to cover <b>' + money0(g.fromSavings / 12) + ' a month</b>' +
       (g.bridge > 0.5 ? ', plus <b>' + money0(g.bridge) + '</b> to bridge the years from ' + g.age + ' until ' + (gaps.length === 1 ? 'age ' + Math.round(gaps[0] * 10) / 10 : 'each source starts') : '') + '.</p>';
   }
+  /* Ticker tape under the net worth panel: market symbols first, then each auto-priced holding (once per ticker),
+     with the latest price and the change from the previous close as of the last refresh. It scrolls slowly, pauses
+     while hovered or focused, and is a still, swipeable row when the device asks for reduced motion. */
+  function tickerTape() {
+    var items = [], seen = {};
+    var item = function (sym, label, price, prev, href) {
+      var d = prev > 0 ? (price - prev) / prev * 100 : null;
+      return '<a class="tp" href="' + href + '"' + (href === '#/stocks' ? ' data-act="movers-all"' : '') + '>' + (label ? '<span class="tp-lab">' + esc(label) + '</span>' : '') + '<b>' + esc(sym) + '</b><span class="tp-px">' + money2(price) + '</span>' +
+        (d == null ? '' : '<span class="' + (d < 0 ? 'neg' : 'pos') + '">' + (d < 0 ? '▼ ' : '▲ ') + sgnPct(d) + '</span>') + '</a>';
+    };
+    var asOf = 0;
+    if (state.settings.tickerMarket) MARKET.forEach(function (m) {
+      var held = state.stocks.filter(function (r) { return !r.manual && priced(r) && String(r.symbol || r.ticker).toUpperCase() === m[0]; })[0];
+      var q = held ? { price: n(held.price), prevClose: held.prevClose, quoteTime: held.quoteTime } : state.market[m[0]];
+      if (!q || !(n(q.price) > 0)) return;
+      items.push(item(m[0], m[1], n(q.price), n(q.prevClose), '#/stocks')); asOf = Math.max(asOf, n(q.quoteTime));
+    });
+    var mine = state.stocks.filter(function (r) { return !r.manual && priced(r); }).sort(function (a, b) { return String(a.ticker).localeCompare(String(b.ticker)); });
+    var tot = 0, prevTot = 0;
+    mine.forEach(function (r) {
+      var d = dayOf(r); if (d) { tot += n(r.qty) * d.chg; prevTot += n(r.qty) * r.prevClose; }
+      asOf = Math.max(asOf, n(r.quoteTime));
+      var k = String(r.ticker).toUpperCase(); if (seen[k]) return; seen[k] = 1;
+      items.push(item(r.ticker, '', n(r.price), n(r.prevClose), '#/stocks'));
+    });
+    if (!items.length) return '';
+    if (prevTot) items.push('<a class="tp tp-tot" href="#/stocks" data-act="movers-all"><span class="tp-lab">Your stocks today</span><b class="' + (tot < 0 ? 'neg' : 'pos') + '">' + signed(tot) + ' (' + sgnPct(tot / prevTot * 100) + ')</b></a>');
+    // Repeat short lists so the strip is always wider than the screen, then double it for a seamless loop.
+    var run = items.slice(); while (run.length < 10) run = run.concat(items);
+    var secs = Math.max(20, run.length * 4);
+    // A negative delay tied to the clock keeps the strip's position steady when the page redraws.
+    var delay = -((Date.now() / 1000) % secs);
+    return '<section class="tape" aria-label="Prices as of the last refresh">' + (asOf ? '<span class="tape-asof">As of ' + esc(when(asOf)) + '</span>' : '') +
+      '<div class="tape-view"><div class="tape-track" style="animation-duration:' + secs + 's;animation-delay:' + delay.toFixed(2) + 's">' +
+      '<div class="tape-run">' + run.join('') + '</div><div class="tape-run tape-dup" aria-hidden="true">' + run.join('').replace(/<a /g, '<a tabindex="-1" ') + '</div></div></div></section>';
+  }
+
   // Today's biggest gainer and loser among your priced holdings, ranked by percent change from the previous close.
   function moversCard() {
     var moves = state.stocks.map(function (r) { var d = dayOf(r); return d ? { r: r, d: d, usd: n(r.qty) * d.chg } : null; }).filter(Boolean);
@@ -2968,6 +3032,8 @@ var FEEDS = {
       '<div id="feedTest"></div>' +
       '<div class="field"><label for="autoSettings">Refresh automatically</label>' + autoSelect('autoSettings') + '<span class="hint">Runs while this page is open and visible, and as soon as it opens if the time has passed. Also refreshes once after each 4:00 PM close for closing prices.</span></div>' +
       '<label class="check"><input type="checkbox" data-feed="marketHoursOnly" data-fk="mho"' + (f.marketHoursOnly ? ' checked' : '') + '> Only during US market hours (9:30 to 4:00 New York time, weekdays)</label>' +
+      '<label class="check"><input type="checkbox" data-set="tickerMarket" data-fk="tickerMarket"' + (st.tickerMarket ? ' checked' : '') + '> Show the S&amp;P 500 (SPY) and Nasdaq-100 (QQQ) in the Overview ticker</label>' +
+      '<p class="hint" style="margin:0">Adds those two symbols to each refresh, unless you already hold them.</p>' +
       '<div class="actions">' + refreshBtn(true) + '</div></section>' +
       backupsCard() +
       historyCard() +
