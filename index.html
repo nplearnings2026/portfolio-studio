@@ -206,6 +206,13 @@ svg text{font-family:var(--mono)}
 .toolbar{padding:10px 18px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px 16px;align-items:center;border-top:1px solid var(--line);background:var(--surface-soft)}
 .toolbar p{margin:0;color:var(--muted);font-size:12px}
 .toolbar label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.tsplit{padding:12px 22px 14px;border-top:1px solid var(--line)}
+.tsplit-bar{height:8px}
+.tsplit-items{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:10px;font-size:12.5px;font-variant-numeric:tabular-nums}
+.tsplit-it{display:inline-flex;align-items:center;gap:7px}
+.tsplit-it>span{color:var(--muted)}
+.tsplit-it em{font-style:normal;font-size:11px;color:var(--muted);opacity:.8}
+.tsplit-it small{color:var(--muted);font-size:11.5px}
 select.mini{min-height:34px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:0 8px;font-size:12px}
 .tablewrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
@@ -557,6 +564,14 @@ dialog h2{font-size:20px}
   .ac-ladder{min-width:0}
   .ac-ladder>*{margin:4px 0 0}
   /* Stocks on a phone: cards instead of the table. */
+  .st-toolbar{flex-wrap:nowrap;padding:8px 16px}
+  .st-toolbar p{flex:1;min-width:0;display:flex}
+  .st-toolbar .chip{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .st-toolbar label{flex:none}
+  .tsplit{padding:12px 16px}
+  .tsplit-items{display:grid;grid-template-columns:auto 1fr auto auto;gap:6px 10px}
+  .tsplit-it{display:contents}
+  .tsplit-it b,.tsplit-it small{text-align:right}
   .st-table,.desk-only{display:none}
   .phone-only{display:inline}
   .panel-head .phone-only{display:block}
@@ -1190,7 +1205,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.10.08', APP_BUILD = 2026100805;
+  var APP_VERSION = '2026.10.09', APP_BUILD = 2026100901;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -1801,9 +1816,19 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     render();
   }
   document.addEventListener('focusout', function () { if (pending) setTimeout(function () { if (pending) { pending = false; softRender(); } }, 0); });
+  // Short form for the phone toolbar, where auto-refresh has its own menu next to it.
+  function feedShort() {
+    if (feedRun.running) return 'Refreshing ' + feedRun.done + ' of ' + feedRun.total;
+    if (!feedKey()) return 'Live prices off';
+    var f = state.feed, prov = FEEDS[f.provider] || FEEDS.finnhub;
+    return prov.label + (f.lastRun ? ' · ' + when(f.lastRun) : ' · not refreshed');
+  }
   function paintLive() {
     var s = feedStatus();
-    document.querySelectorAll('[data-feed-chip]').forEach(function (el) { el.className = 'chip ' + s.cls; el.textContent = s.text; });
+    // Only the status classes change, so layout classes (phone-only, desk-only) stay put.
+    var mark = function (el) { el.classList.remove('live', 'busy'); if (s.cls) el.classList.add(s.cls); };
+    document.querySelectorAll('[data-feed-chip]').forEach(function (el) { mark(el); el.textContent = s.text; });
+    document.querySelectorAll('[data-feed-short]').forEach(function (el) { mark(el); el.textContent = feedShort(); });
   }
   function saveText() {
     if (ui.demo) return 'Sample data · changes aren’t saved';
@@ -2057,6 +2082,24 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       (p ? '<span class="' + cls(g) + '">' + signed(g) + (cost ? ' · ' + sgnPct(g / cost * 100) : '') + '</span>' : '<span class="muted">—</span>') + '</span>' +
       '</span></button>';
   }
+  /* Split of market value by holding type, under the Holdings heading: stocks, ETFs, mutual funds, then everything else
+     (bonds, other, and priced private holdings) as Other. Holdings with no price have no value and are left out. */
+  var SPLIT = [['Stock', 'Stocks', 'var(--c-st)'], ['ETF', 'ETFs', 'var(--c-eq)'], ['Mutual Fund', 'Mutual funds', 'var(--c-k4)'], ['', 'Other', 'var(--c-sv)']];
+  function typeSplit() {
+    var tot = 0, v = SPLIT.map(function () { return { val: 0, n: 0 }; });
+    state.stocks.forEach(function (r) {
+      if (!priced(r)) return;
+      var i = SPLIT.map(function (x) { return x[0]; }).indexOf(r.type); if (i < 0) i = SPLIT.length - 1;
+      var mv = n(r.qty) * n(r.price); v[i].val += mv; v[i].n++; tot += mv;
+    });
+    if (!tot) return '';
+    var parts = SPLIT.map(function (x, i) { return { label: x[1], c: x[2], val: v[i].val, n: v[i].n }; }).filter(function (x) { return x.n; });
+    return '<div class="tsplit"><div class="bal-bar tsplit-bar" role="img" aria-label="' + esc(parts.map(function (x) { return x.label + ' ' + pct(x.val / tot * 100); }).join(', ')) + '">' +
+      parts.map(function (x) { return '<span style="width:' + (x.val / tot * 100).toFixed(2) + '%;background:' + x.c + '"></span>'; }).join('') + '</div>' +
+      '<div class="tsplit-items">' + parts.map(function (x) {
+        return '<span class="tsplit-it"><i class="dot" style="--c:' + x.c + '"></i><span>' + x.label + ' <em>' + x.n + '</em></span><b>' + money0(x.val) + '</b><small>' + pct(x.val / tot * 100) + '</small></span>';
+      }).join('') + '</div></div>';
+  }
   function renderStocks() {
     var t = totals(state), list = state.stocks.slice(), s = ui.sort, get = SORTS[s.key] || SORTS.ticker;
     list.sort(function (a, b) {
@@ -2116,7 +2159,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<p>' + (unpriced.length ? 'Priced positions only. ' + esc(unpriced.map(function (r) { return r.ticker; }).join(', ')) + ' ' + (unpriced.length === 1 ? 'has' : 'have') + ' no market price and ' + (unpriced.length === 1 ? 'is' : 'are') + ' left out.' : 'Every position has a price.') + '</p></article>' +
       '<article class="card keys"><div class="eyebrow">Performance</div><div class="key-grid">' + keyItems + '</div></article></div>' +
       '<section class="card panel" aria-labelledby="hTitle"><div class="panel-head"><div><h2 id="hTitle">Holdings</h2><p><span class="desk-only">Select a column heading to sort. Type a price and press Enter or Tab to save it.</span><span class="phone-only">' + phoneSum + '</span></p></div><span class="mono muted desk-only" style="font-size:11px">' + state.stocks.length + ' positions · USD</span></div>' +
-      '<div class="toolbar"><p><span class="chip ' + s2.cls + '" data-feed-chip>' + esc(s2.text) + '</span></p><label for="autoStocks">Auto-refresh ' + autoSelect('autoStocks') + '</label></div>' +
+      '<div class="toolbar st-toolbar"><p><span class="chip ' + s2.cls + ' desk-only" data-feed-chip>' + esc(s2.text) + '</span><span class="chip ' + s2.cls + ' phone-only" data-feed-short>' + esc(feedShort()) + '</span></p><label for="autoStocks"><span class="desk-only">Auto-refresh</span><span class="phone-only">Auto</span> ' + autoSelect('autoStocks') + '</label></div>' +
+      typeSplit() +
       table + '</section>' +
       '<p class="note">Prices you type are kept until the next live refresh. Holdings marked Manual, such as private shares, are never overwritten. Day change compares the latest price with the previous close from the price feed.</p>';
   }
