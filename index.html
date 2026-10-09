@@ -227,7 +227,7 @@ tbody tr:hover{background:color-mix(in srgb,var(--accent) 4%,transparent)}
 .logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;padding:3px;opacity:0}
 .logo img.ok{opacity:1}
 .logo.sm{width:28px;height:28px;border-radius:8px;font-size:10.5px}.logo.sm.l3{font-size:9px}.logo.sm.l4{font-size:8px}.logo.sm.l5{font-size:6.5px}
-.phone-only,.hcards{display:none}
+.phone-only,.hcards,.ac-phone,.pj-phone{display:none}
 .tag{display:inline-block;margin-top:4px;font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:5px;background:var(--surface-soft);color:var(--muted);white-space:nowrap}
 .tag.warn{background:var(--accent-soft);color:var(--neg);cursor:help}
 .subline{display:block;font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap}
@@ -493,9 +493,74 @@ dialog h2{font-size:20px}
   .side{display:none}
   main{padding:18px 16px 30px}
   .topline [data-feed-chip]{display:none}
+  /* Projections on a phone: Today-vs-final card and compact year rows instead of the KPI cards and table. */
+  .pj-desk{display:none!important}
+  .pj-phone{display:grid;gap:14px}
+  .pj-cmp{padding:16px}
+  .pj-grid{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px 14px;align-items:baseline;font-size:13px;font-variant-numeric:tabular-nums}
+  .pj-grid>span:not(.pj-l),.pj-grid>b{text-align:right;white-space:nowrap}
+  .pj-grid>span:not(.pj-l){color:var(--muted)}
+  .pj-h{font-size:11px;font-weight:700;color:var(--muted)}
+  .pj-l{display:flex;align-items:center;gap:8px;min-width:0}
+  .pj-rule{grid-column:1/-1;height:1px;background:var(--line)}
+  .pj-net{font-weight:700;color:var(--ink)!important}
+  b.pj-net{font-size:15px}
+  .pj-years{padding:0;overflow:hidden}
+  .pj-yr{border-top:1px solid var(--line)}
+  .pj-row{display:grid;grid-template-columns:minmax(0,1fr) auto 18px;grid-template-areas:"when nw chev" "bar dlt chev";gap:6px 12px;align-items:center;width:100%;padding:11px 14px 11px 16px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+  .pj-row:active,.pj-yr.open>.pj-row{background:var(--surface-soft)}
+  .pj-when{grid-area:when;display:flex;align-items:baseline;gap:8px;font-size:13px}
+  .pj-when span{color:var(--muted);font-size:12px}
+  .pj-when .tag{font-size:9px}
+  .pj-nw{grid-area:nw;text-align:right;font-variant-numeric:tabular-nums;font-size:14px}
+  .pj-row .ac-chev{grid-area:chev}
+  .pj-yr.open .ac-chev{transform:rotate(90deg);color:var(--ink)}
+  .pj-bar{grid-area:bar;display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--surface-soft)}
+  .pj-yr.open .pj-bar{background:var(--surface)}
+  .pj-bar span{height:100%}
+  .pj-dlt{grid-area:dlt;text-align:right;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+  .pj-det{display:grid;grid-template-columns:1fr auto;gap:6px 12px;padding:4px 48px 14px 16px;background:var(--surface-soft);font-size:12.5px;font-variant-numeric:tabular-nums}
+  .pj-det span{color:var(--muted)}
+  /* Accounts on a phone: balance-sheet card and an accordion instead of the strip, tabs and table. */
+  .ac-desk{display:none}
+  .ac-phone{display:grid;gap:14px}
+  .ac-bs{padding:16px}
+  .ac-bs-top{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--muted);margin-bottom:10px}
+  .ac-bs-top b{font-size:16px;color:var(--ink);margin-left:4px}
+  .ac-bs-top b.neg{color:var(--neg)}
+  .ac-bs-rows{display:grid;grid-template-columns:1fr auto;gap:6px 12px;margin-top:12px;font-size:13px;font-variant-numeric:tabular-nums}
+  .ac-bs-rows>span{display:flex;align-items:center;gap:8px;color:var(--muted)}
+  .ac-bs-rule{grid-column:1/-1;height:1px;background:var(--line);margin:2px 0}
+  .ac-bs-net{font-weight:700;color:var(--ink)!important}
+  .ac-list{padding:0;overflow:hidden}
+  .ac-cat+.ac-cat{border-top:1px solid var(--line)}
+  .ac-row{display:grid;grid-template-columns:36px minmax(0,1fr) auto 18px;gap:12px;align-items:center;width:100%;padding:14px 14px 14px 16px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+  .ac-row:active{background:var(--surface-soft)}
+  .ac-name{display:grid;gap:2px;min-width:0}
+  .ac-name b{font-size:14px}
+  .ac-name span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ac-total{font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ac-chev{width:18px;height:18px;color:var(--muted);transition:transform .2s}
+  .ac-cat.open .ac-chev{transform:rotate(90deg);color:var(--ink)}
+  .ac-cat.open>.ac-row{background:var(--surface-soft)}
+  .ac-body{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:10px 12px 14px;background:var(--surface-soft)}
+  .ac-cat.open .glyph{background:var(--surface)}
+  .ac-item{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .ac-item-main{display:grid;gap:3px;width:100%;padding:12px 14px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+  .ac-item-main:active{background:var(--surface-soft)}
+  .ac-item-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13.5px}
+  .ac-item-top b:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ac-item-val{flex:none;font-variant-numeric:tabular-nums}
+  .ac-item-sub{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .ac-item-acts{display:flex;gap:8px;padding:0 14px 12px}
+  .ac-add{padding:12px;border:1px dashed var(--line);border-radius:12px;background:none;color:var(--ink);font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+  .ac-ladder{min-width:0}
+  .ac-ladder>*{margin:4px 0 0}
   /* Stocks on a phone: cards instead of the table. */
   .st-table,.desk-only{display:none}
   .phone-only{display:inline}
+  .panel-head .phone-only{display:block}
+  .panel-head>div:first-child{flex:1 1 240px}
   .hcards{display:block;border-top:1px solid var(--line)}
   .hc-bar{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 16px;font-size:12px;color:var(--muted)}
   .hc{display:flex;gap:12px;align-items:center;width:100%;padding:12px 16px;border:0;border-top:1px solid var(--line);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
@@ -510,9 +575,10 @@ dialog h2{font-size:20px}
   .hc-co{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
   .hc-sub{color:var(--muted);font-size:12px}
   .hc-row .pos,.hc-row .neg{font-weight:700}
-  .hc-total{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:14px 16px;border-top:2px solid var(--line);font-size:12px;color:var(--muted)}
-  .hc-total>b{font-size:16px;color:var(--ink);text-align:right}
-  .hc-total>span:last-child{grid-column:1/-1}
+  .phone-only .hc-sum{display:grid;gap:3px;margin-top:6px;font-size:12.5px;font-variant-numeric:tabular-nums}
+  .hc-sum-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .hc-sum-top b{font-size:18px;color:var(--ink)}
+  .hc-hint{font-size:11.5px;color:var(--muted);margin-top:2px}
   /* Phone: data indicator and save status share one row; the indicator drops its extra words, the status trims to fit. */
   .topline{flex-wrap:nowrap;margin-bottom:22px}
   .topline .flag{flex:none}
@@ -1124,7 +1190,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.10.08', APP_BUILD = 2026100802;
+  var APP_VERSION = '2026.10.08', APP_BUILD = 2026100805;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -2035,9 +2101,11 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     var sortOpts = PHONE_SORTS.map(function (o) { return '<option value="' + o[0] + ':' + o[1] + '"' + (s.key === o[0] && s.dir === o[1] ? ' selected' : '') + '>' + o[2] + '</option>'; }).join('');
     var cards = '<div class="hcards"><div class="hc-bar"><label for="hsort">Sort</label><select id="hsort" class="mini" data-fk="hsort">' +
       (PHONE_SORTS.some(function (o) { return s.key === o[0] && s.dir === o[1]; }) ? '' : '<option selected disabled>Choose</option>') + sortOpts + '</select></div>' +
-      list.map(holdingCard).join('') +
-      '<div class="hc-total"><span>Total · ' + list.length + ' holding' + (list.length === 1 ? '' : 's') + '</span><b>' + money2(t.stocks) + '</b>' +
-      '<span>' + (t.dayKnown ? 'Today <b class="' + (t.dayChange < 0 ? 'neg' : 'pos') + '">' + signed(t.dayChange) + '</b> · ' : '') + 'Gain <b class="' + (t.stockGain < 0 ? 'neg' : 'pos') + '">' + signed(t.stockGain) + (t.stockCostPriced ? ' (' + sgnPct(t.stockGain / t.stockCostPriced * 100) + ')' : '') + '</b></span></div></div>';
+      list.map(holdingCard).join('') + '</div>';
+    // Phone: the totals sit in the Holdings heading, above the cards.
+    var phoneSum = list.length ? '<span class="hc-sum"><span class="hc-sum-top"><span>' + list.length + ' holding' + (list.length === 1 ? '' : 's') + '</span><b>' + money2(t.stocks) + '</b></span>' +
+      '<span>' + (t.dayKnown ? 'Today <b class="' + (t.dayChange < 0 ? 'neg' : 'pos') + '">' + signed(t.dayChange) + '</b> · ' : '') + 'Gain <b class="' + (t.stockGain < 0 ? 'neg' : 'pos') + '">' + signed(t.stockGain) + (t.stockCostPriced ? ' (' + sgnPct(t.stockGain / t.stockCostPriced * 100) + ')' : '') + '</b></span>' +
+      '<span class="hc-hint">Tap a holding to edit it or enter a price.</span></span>' : '<span class="hc-hint">Add your first position to see it here.</span>';
     var table = list.length ? '<div class="tablewrap st-table"><table class="rt" style="min-width:1020px">' + '<thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody>' + foot + '</table></div>' + cards
       : '<div class="empty">No holdings yet. Add your first position to include it in totals and projections.</div>';
     var s2 = feedStatus();
@@ -2047,7 +2115,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<div><span>Market value</span><b class="si-total">' + money2(t.stocks) + '</b></div></div></div>' +
       '<p>' + (unpriced.length ? 'Priced positions only. ' + esc(unpriced.map(function (r) { return r.ticker; }).join(', ')) + ' ' + (unpriced.length === 1 ? 'has' : 'have') + ' no market price and ' + (unpriced.length === 1 ? 'is' : 'are') + ' left out.' : 'Every position has a price.') + '</p></article>' +
       '<article class="card keys"><div class="eyebrow">Performance</div><div class="key-grid">' + keyItems + '</div></article></div>' +
-      '<section class="card panel" aria-labelledby="hTitle"><div class="panel-head"><div><h2 id="hTitle">Holdings</h2><p><span class="desk-only">Select a column heading to sort. Type a price and press Enter or Tab to save it.</span><span class="phone-only">Tap a holding to edit it or enter a price.</span></p></div><span class="mono muted" style="font-size:11px">' + state.stocks.length + ' positions · USD</span></div>' +
+      '<section class="card panel" aria-labelledby="hTitle"><div class="panel-head"><div><h2 id="hTitle">Holdings</h2><p><span class="desk-only">Select a column heading to sort. Type a price and press Enter or Tab to save it.</span><span class="phone-only">' + phoneSum + '</span></p></div><span class="mono muted desk-only" style="font-size:11px">' + state.stocks.length + ' positions · USD</span></div>' +
       '<div class="toolbar"><p><span class="chip ' + s2.cls + '" data-feed-chip>' + esc(s2.text) + '</span></p><label for="autoStocks">Auto-refresh ' + autoSelect('autoStocks') + '</label></div>' +
       table + '</section>' +
       '<p class="note">Prices you type are kept until the next live refresh. Holdings marked Manual, such as private shares, are never overwritten. Day change compares the latest price with the previous close from the price feed.</p>';
@@ -2219,6 +2287,61 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     if (k === 'assets') return c('Total value', money0(t.assets)) + c('Equity after loans', money0(Math.max(0, t.assets - t.mortgage)), 'pos') + c('Items', state.assets.length);
     return c('Balance owed', money0(t.mortgage), 'neg') + c('Monthly payments', money0(state.mortgage.reduce(function (a, r) { return a + n(r.payment); }, 0))) + c('Loans', state.mortgage.length);
   }
+  /* Phone layout for Accounts: one balance-sheet card, then an accordion with one row per category. Tapping a row
+     opens its accounts underneath (one category open at a time); tapping an account opens its edit dialog. */
+  var CHEV = '<svg class="ac-chev" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+  function acNote(k) {
+    var list = state[k], c = list.length;
+    if (!c) return 'Nothing added yet';
+    var count = c + ' ' + (k === 'cds' ? (c === 1 ? 'CD' : 'CDs') : k === 'mortgage' ? (c === 1 ? 'loan' : 'loans') : k === 'assets' ? (c === 1 ? 'asset' : 'assets') : (c === 1 ? 'account' : 'accounts'));
+    if (k === 'k401') return count + ' · ' + signed(list.reduce(function (a, r) { return a + n(r.contrib); }, 0)) + ' a year';
+    if (k === 'cds') {
+      var next = list.filter(function (r) { return parseDate(r.matures) && daysUntil(r.matures) >= 0; }).sort(function (a, b) { return parseDate(a.matures) - parseDate(b.matures); })[0];
+      var due = list.filter(function (r) { var d = daysUntil(r.matures); return d != null && d < 0; }).length;
+      return count + (due ? ' · ' + due + ' matured' : '') + (next ? ' · next matures ' + parseDate(next.matures).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '');
+    }
+    if (k === 'cash') return count + ' · ' + wavg(list, 'balance').toFixed(2) + '% average APY';
+    if (k === 'assets') return count + ' · estimated value';
+    return catNote(k);
+  }
+  function acItem(k, r) {
+    var val, sub, sub2 = '';
+    if (k === 'k401') { val = money2(n(r.balance)); sub = signed(n(r.contrib)) + ' a year'; }
+    else if (k === 'cds') {
+      val = money2(cdValueNow(r)); sub = n(r.apy).toFixed(2) + '% · matures ' + fmtDate(r.matures) + ' · ' + maturesIn(r.matures);
+      var am = cdAtMaturity(r); sub2 = 'Principal ' + money0(n(r.principal)) + (am == null ? '' : ' · ' + money0(am) + ' at maturity');
+    }
+    else if (k === 'cash') { val = money2(n(r.balance)); sub = n(r.apy).toFixed(2) + '% APY'; }
+    else if (k === 'assets') { val = money2(n(r.value)); sub = '<span class="' + (n(r.growth) < 0 ? 'neg' : '') + '">' + sgnPct(n(r.growth)) + '</span> a year'; }
+    else { val = '<span class="neg">−' + money2(n(r.balance)) + '</span>'; sub = esc(r.kind || 'Mortgage') + ' · ' + n(r.rate).toFixed(2) + '% · ' + money0(n(r.payment)) + '/mo'; sub2 = COLS.mortgage[5][1](r); }
+    var acts = k === 'cds' ? cdActions(r) : '';
+    return '<div class="ac-item"><button type="button" class="ac-item-main" data-act="edit" data-cat="' + k + '" data-id="' + esc(r.id) + '" aria-label="Edit ' + esc(r.name) + '">' +
+      '<span class="ac-item-top"><b>' + esc(r.name) + '</b><b class="ac-item-val">' + val + '</b></span>' +
+      '<span class="ac-item-sub">' + sub + '</span>' + (sub2 ? '<span class="ac-item-sub">' + sub2 + '</span>' : '') + '</button>' +
+      (acts ? '<div class="ac-item-acts">' + acts + '</div>' : '') + '</div>';
+  }
+  function accountsPhone(t) {
+    var A = t.totalAssets || 1;
+    var parts = [['Investments', t.stocks + t.k401, 'var(--c-st)'], ['Cash & CDs', t.cash + t.cds, 'var(--c-cc)'], ['Property & assets', t.assets, 'var(--c-eq)']];
+    var bs = '<article class="card ac-bs"><div class="ac-bs-top"><span>Assets <b>' + money0(t.totalAssets) + '</b></span><span>Owed <b class="' + (t.liabilities ? 'neg' : '') + '">' + (t.liabilities ? '−' : '') + money0(t.liabilities) + '</b></span></div>' +
+      '<div class="bal-bar" role="img" aria-label="' + esc(parts.map(function (p) { return p[0] + ' ' + money0(p[1]); }).join(', ')) + '">' + parts.map(function (p) { return '<span style="width:' + (p[1] / A * 100).toFixed(2) + '%;background:' + p[2] + '"></span>'; }).join('') + '</div>' +
+      '<div class="ac-bs-rows">' + parts.map(function (p) { return '<span><i class="dot" style="--c:' + p[2] + '"></i>' + p[0] + '</span><b>' + money0(p[1]) + '</b>'; }).join('') +
+      '<i class="ac-bs-rule"></i><span class="ac-bs-net">Net worth</span><b class="ac-bs-net">' + money0(t.net) + '</b></div></article>';
+    var rows = ACCT_TABS.map(function (k) {
+      var open = ui.acOpen === k, neg = k === 'mortgage' && t[k];
+      var body = '';
+      if (open) {
+        body = '<div class="ac-body" id="ac-' + k + '">' + state[k].map(function (r) { return acItem(k, r); }).join('') +
+          '<button type="button" class="ac-add" data-act="add" data-cat="' + k + '">+ Add ' + CATS[k].one + '</button>' +
+          (k === 'cds' && state.cds.length ? '<div class="ac-ladder">' + ladderCard() + '</div>' : '') + '</div>';
+      }
+      return '<div class="ac-cat' + (open ? ' open' : '') + '"><button type="button" class="ac-row" data-act="ac-toggle" data-cat="' + k + '" aria-expanded="' + open + '" aria-controls="ac-' + k + '">' +
+        '<span class="glyph">' + icon(k) + '</span><span class="ac-name"><b>' + CATS[k].label + '</b><span>' + esc(acNote(k)) + '</span></span>' +
+        '<b class="ac-total' + (neg ? ' neg' : '') + '">' + (neg ? '−' : '') + money0(t[k]) + '</b>' + CHEV + '</button>' + body + '</div>';
+    }).join('');
+    return '<div class="ac-phone">' + bs + '<div class="card ac-list">' + rows + '</div>' +
+      '<p class="note">Stocks and funds live on the <a href="#/stocks">Stocks</a> page, where prices can refresh automatically.</p></div>';
+  }
   function renderAccounts() {
     var t = totals(state), k = ACCT_TABS.indexOf(ui.tab) >= 0 ? ui.tab : 'k401', cols = COLS[k], list = state[k];
     var strip = [['Investments', t.stocks + t.k401], ['Cash & CDs', t.cash + t.cds], ['Property & assets', t.assets], ['Liabilities', -t.liabilities]].map(function (x) {
@@ -2244,13 +2367,14 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       : '<div class="empty">No ' + CATS[k].label.toLowerCase() + ' yet. Add your first ' + CATS[k].one + ' to include it in totals and projections.</div>';
     var note = k === 'cds' ? '“At maturity” assumes the APY compounds yearly from the opened date to the maturity date.' : '';
     return '<header class="head"><div><div class="eyebrow">Balance sheet</div><h1>Every account, one clear picture.</h1></div><div class="actions"><a class="btn" href="#/stocks">Stocks &amp; funds</a><a class="btn primary" href="#/projections">Open projections</a></div></header>' +
+      accountsPhone(t) + '<div class="ac-desk">' +
       '<div class="strip" aria-label="Balance sheet totals">' + strip + '</div>' +
       '<div class="tabs" role="group" aria-label="Account types">' + tabs + '</div>' +
       '<div class="stats">' + statCards(k) + '</div>' +
       '<section class="card panel"><div class="panel-head"><h2>' + CATS[k].label + '</h2><button class="btn primary" data-act="add" data-cat="' + k + '">Add ' + CATS[k].one + '</button></div>' + table + '</section>' +
       (note ? '<p class="note">' + note + '</p>' : '') +
       (k === 'cds' ? ladderCard() : '') +
-      '<p class="note">Stocks and funds live on the <a href="#/stocks">Stocks</a> page, where prices can refresh automatically.</p>';
+      '<p class="note">Stocks and funds live on the <a href="#/stocks">Stocks</a> page, where prices can refresh automatically.</p></div>';
   }
 
   /* ---------- projections ---------- */
@@ -2373,6 +2497,40 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   function projOutputs() {
     return goalCard() + (state.settings.projView === 'accounts' ? blockOutputs() : combinedOutputs());
   }
+  /* Phone layout for the combined projection: a Today-vs-final-year card, then one compact row per year with a mix
+     bar (same colors as the chart, scaled to the largest year) that opens to the full breakdown. */
+  function projPhone(rows) {
+    var st = state.settings, first = rows[0], last = rows[rows.length - 1];
+    var inv = function (r) { return r.stocks + r.k401 + r.cds + r.cash; };
+    var line = function (c, label, a, b, neg) {
+      var f = function (v) { return neg ? (v > 0.5 ? '<span class="neg">−' + money0(v) + '</span>' : '$0') : money0(v); };
+      return '<span class="pj-l">' + (c ? '<i class="dot" style="--c:' + c + '"></i>' : '') + label + '</span><span>' + f(a) + '</span><b>' + f(b) + '</b>';
+    };
+    var cmp = '<article class="card pj-cmp"><div class="pj-grid"><span></span><span class="pj-h">Today</span><span class="pj-h">' + last.year + '</span>' +
+      line('', 'Investments &amp; cash', inv(first), inv(last)) +
+      line('', 'Home &amp; vehicle', first.assets, last.assets) +
+      line('', 'Loans left', first.mortgage, last.mortgage, true) +
+      '<i class="pj-rule"></i><span class="pj-l pj-net">Net worth' + (st.afterTax ? ' after tax' : '') + '</span><span class="pj-net">' + money0(first.net) + '</span><b class="pj-net">' + money0(last.net) + '</b></div></article>';
+    var stack = function (r) { return [['var(--c-eq)', Math.max(0, r.assets - r.mortgage)], ['var(--c-st)', r.stocks], ['var(--c-k4)', r.k401], ['var(--c-cc)', r.cds + r.cash]]; };
+    var mx = Math.max.apply(null, rows.map(function (r) { return stack(r).reduce(function (a, x) { return a + Math.max(0, x[1]); }, 0); }).concat([1]));
+    var age0 = n(st.goalAge), retire = n(st.goalRetireAge);
+    var list = rows.map(function (r, i) {
+      var open = ui.pjOpen === i, dlt = i ? r.net - rows[i - 1].net : 0, age = age0 ? age0 + r.y : 0;
+      var bar = stack(r).map(function (x) { return '<span style="width:' + (Math.max(0, x[1]) / mx * 100).toFixed(2) + '%;background:' + x[0] + '"></span>'; }).join('');
+      var det = '';
+      if (open) {
+        var d = function (l, v, cls) { return '<span>' + l + '</span><b class="' + (cls || '') + '">' + v + '</b>'; };
+        det = '<div class="pj-det">' + d('Stocks &amp; funds', money0(r.stocks)) + d('401(k)', money0(r.k401)) + d('CDs &amp; cash', money0(r.cds + r.cash)) + d('Home &amp; vehicle', money0(r.assets)) +
+          d('Loans', r.mortgage > 0.5 ? '−' + money0(r.mortgage) : '$0', r.mortgage > 0.5 ? 'neg' : '') +
+          (st.afterTax && r.taxStocks + r.tax401 > 0.5 ? d('Already less est. taxes', '−' + money0(r.taxStocks + r.tax401), 'muted') : '') + '</div>';
+      }
+      return '<div class="pj-yr' + (open ? ' open' : '') + '"><button type="button" class="pj-row" data-act="pj-year" data-i="' + i + '" aria-expanded="' + open + '">' +
+        '<span class="pj-when"><b>' + (i === 0 ? 'Today' : r.year) + '</b>' + (age ? '<span>age ' + age + '</span>' : '') + (age && age === retire ? '<span class="tag">Retire</span>' : '') + '</span>' +
+        '<b class="pj-nw">' + money0(r.net) + '</b>' + CHEV +
+        '<span class="pj-bar">' + bar + '</span><span class="pj-dlt ' + (dlt < 0 ? 'neg' : 'pos') + '">' + (i ? signed(dlt) : '') + '</span></button>' + det + '</div>';
+    }).join('');
+    return '<div class="pj-phone">' + cmp + '<section class="card panel pj-years"><div class="panel-head"><h2>Year by year</h2><button class="btn sm" data-act="proj-csv">Export as CSV</button></div>' + list + '</section></div>';
+  }
   function combinedOutputs() {
     var st = state.settings, sc = SCEN[st.scenario] || SCEN.base, t = totals(state);
     var rows = project(state).map(function (r) { return st.afterTax ? Object.assign({}, r, { stocks: r.stocks - r.taxStocks, k401: r.k401 - r.tax401, net: r.netAfter }) : r; });
@@ -2386,10 +2544,11 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     return '<article class="card chart-card"><div class="chart-top"><div class="pv"><span>Projected net worth' + (st.afterTax ? ' after tax' : '') + ' in ' + last.year + (st.real ? ' · today’s dollars' : '') + '</span><b>' + money0(last.net) + '</b><span>' + esc(mult) + (st.afterTax ? '' : ' · ' + money0(last.netAfter) + ' after tax') + '</span>' + (st.afterTax && last.taxStocks + last.tax401 > 0.5 ? '<span class="pv-tax"><b>−' + money0(last.taxStocks + last.tax401) + '</b> estimated taxes if cashed out · ' + money0(last.taxStocks) + ' on stock gains, ' + money0(last.tax401) + ' on the 401(k)</span>' : '') + '</div>' +
       '<div><div class="eyebrow">' + sc.label + ' scenario</div><div class="c-legend">' + legend + '</div></div></div>' +
       '<div class="chart-scroll">' + stackedChart(rows) + '</div><p class="note">' + (st.afterTax ? 'Stocks and 401(k) are shown after the tax due if cashed out that year. ' : '') + 'Hover a column for its total. Illustrative model only; actual returns and values will vary.</p></article>' +
-      '<div class="kpis"><div><span>Investments &amp; cash</span><b>' + money0(last.stocks + last.k401 + last.cds + last.cash) + '</b><small>Today ' + money0(t.investable) + '</small></div>' +
+      projPhone(rows) +
+      '<div class="kpis pj-desk"><div><span>Investments &amp; cash</span><b>' + money0(last.stocks + last.k401 + last.cds + last.cash) + '</b><small>Today ' + money0(t.investable) + '</small></div>' +
       '<div><span>Home &amp; vehicle</span><b>' + money0(last.assets) + '</b><small>Today ' + money0(t.assets) + '</small></div>' +
       '<div><span>Loans left</span><b class="neg">' + (last.mortgage > 0.5 ? money0(last.mortgage) : '$0') + '</b><small>Today ' + money0(t.mortgage) + '</small></div></div>' +
-      '<section class="card panel"><div class="panel-head"><h2>Year by year</h2><button class="btn sm" data-act="proj-csv">Export as CSV</button></div><div class="tablewrap"><table class="rt" style="min-width:700px"><thead><tr><th>When</th><th class="num">Stocks &amp; funds</th><th class="num">401(k)</th><th class="num">CDs &amp; cash</th><th class="num">Home &amp; vehicle</th><th class="num">Loans</th><th class="num">Net worth</th><th class="num">Change</th></tr></thead><tbody>' + tr + '</tbody></table></div></section>';
+      '<section class="card panel pj-desk"><div class="panel-head"><h2>Year by year</h2><button class="btn sm" data-act="proj-csv">Export as CSV</button></div><div class="tablewrap"><table class="rt" style="min-width:700px"><thead><tr><th>When</th><th class="num">Stocks &amp; funds</th><th class="num">401(k)</th><th class="num">CDs &amp; cash</th><th class="num">Home &amp; vehicle</th><th class="num">Loans</th><th class="num">Net worth</th><th class="num">Change</th></tr></thead><tbody>' + tr + '</tbody></table></div></section>';
   }
 
   /* By account: one block each for stocks, 401(k), CDs and savings. */
@@ -3235,7 +3394,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     if (old) { rec.id = old.id; list[list.indexOf(old)] = rec; } else { rec.id = uid(); list.push(rec); }
     var wasEdit = !!old, replaced = dlgCtx.replace;
     if (replaced) state[dlgCtx.cat] = state[dlgCtx.cat].filter(function (r) { return r.id !== replaced; });
-    if (dlgCtx.cat !== 'stocks') ui.tab = dlgCtx.cat;
+    if (dlgCtx.cat !== 'stocks') ui.tab = ui.acOpen = dlgCtx.cat;
     pending = false; save(); dlg.close(); render();
     toast(replaced ? 'CD renewed' : wasEdit ? 'Changes saved' : 'Added');
   });
@@ -3278,8 +3437,17 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
 
   /* ---------- events ---------- */
   var actions = {
-    'tab': function (el) { ui.tab = el.dataset.cat; render(); },
-    'goto-tab': function (el) { ui.tab = el.dataset.cat; },
+    'tab': function (el) { ui.tab = ui.acOpen = el.dataset.cat; render(); },
+    'goto-tab': function (el) { ui.tab = ui.acOpen = el.dataset.cat; },
+    'pj-year': function (el) { var i = +el.dataset.i; ui.pjOpen = ui.pjOpen === i ? null : i; refreshProjOutputs(); },
+    'ac-toggle': function (el) {
+      var k = el.dataset.cat;
+      ui.acOpen = ui.acOpen === k ? null : k;
+      if (ui.acOpen) ui.tab = k;
+      render();
+      // Keep the opened row in view, just under the top of the screen.
+      if (ui.acOpen) { var row = document.querySelector('.ac-row[data-cat="' + k + '"]'); if (row && row.getBoundingClientRect().top < 0) row.scrollIntoView({ block: 'start' }); }
+    },
     'add': function (el) { openDialog(el.dataset.cat); },
     'edit': function (el) { openDialog(el.dataset.cat, el.dataset.id); },
     'dlg-delete': function () {
