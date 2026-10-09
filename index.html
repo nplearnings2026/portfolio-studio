@@ -221,6 +221,13 @@ th[aria-sort="ascending"] button::after{content:" ↑";color:var(--accent)}
 th[aria-sort="descending"] button::after{content:" ↓";color:var(--accent)}
 tbody tr:hover{background:color-mix(in srgb,var(--accent) 4%,transparent)}
 .tk{font-family:var(--mono);font-weight:500;font-size:14px}
+.tk-cell{display:flex;align-items:center;gap:10px}
+.logo{position:relative;flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:11px;overflow:hidden;font-family:var(--mono);font-weight:700;font-size:14px;letter-spacing:-.02em;color:var(--ink);background:color-mix(in srgb,var(--c) 22%,var(--surface));border:1px solid color-mix(in srgb,var(--c) 35%,transparent)}
+.logo.l3{font-size:12px}.logo.l4{font-size:10.5px}.logo.l5{font-size:9px;letter-spacing:-.04em}
+.logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;padding:3px;opacity:0}
+.logo img.ok{opacity:1}
+.logo.sm{width:28px;height:28px;border-radius:8px;font-size:10.5px}.logo.sm.l3{font-size:9px}.logo.sm.l4{font-size:8px}.logo.sm.l5{font-size:6.5px}
+.phone-only,.hcards{display:none}
 .tag{display:inline-block;margin-top:4px;font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:5px;background:var(--surface-soft);color:var(--muted);white-space:nowrap}
 .tag.warn{background:var(--accent-soft);color:var(--neg);cursor:help}
 .subline{display:block;font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap}
@@ -486,6 +493,26 @@ dialog h2{font-size:20px}
   .side{display:none}
   main{padding:18px 16px 30px}
   .topline [data-feed-chip]{display:none}
+  /* Stocks on a phone: cards instead of the table. */
+  .st-table,.desk-only{display:none}
+  .phone-only{display:inline}
+  .hcards{display:block;border-top:1px solid var(--line)}
+  .hc-bar{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 16px;font-size:12px;color:var(--muted)}
+  .hc{display:flex;gap:12px;align-items:center;width:100%;padding:12px 16px;border:0;border-top:1px solid var(--line);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+  .hc:active{background:var(--surface-soft)}
+  .hc.flash{animation:flash 1.2s ease-out}
+  .hc-main{flex:1;min-width:0;display:grid;gap:3px}
+  .hc-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12.5px;font-variant-numeric:tabular-nums}
+  .hc-row>span:last-child,.hc-row>b{flex:none;white-space:nowrap}
+  .hc-tk{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-weight:700;font-size:15px;min-width:0}
+  .hc-tk .tag{font-family:var(--sans,inherit);font-size:9px}
+  .hc-val{font-size:15px}
+  .hc-co{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+  .hc-sub{color:var(--muted);font-size:12px}
+  .hc-row .pos,.hc-row .neg{font-weight:700}
+  .hc-total{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:14px 16px;border-top:2px solid var(--line);font-size:12px;color:var(--muted)}
+  .hc-total>b{font-size:16px;color:var(--ink);text-align:right}
+  .hc-total>span:last-child{grid-column:1/-1}
   /* Phone: data indicator and save status share one row; the indicator drops its extra words, the status trims to fit. */
   .topline{flex-wrap:nowrap;margin-bottom:22px}
   .topline .flag{flex:none}
@@ -1097,7 +1124,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.10.08', APP_BUILD = 2026100801;
+  var APP_VERSION = '2026.10.08', APP_BUILD = 2026100802;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -1220,6 +1247,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   function openGate() {
     if (cloud.firstDone) return;
     cloud.firstDone = true;
+    setTimeout(fetchLogos, 4000);
     if (snapDue()) { save(true); softRender(); }
     setTimeout(autoTick, 500);
   }
@@ -1635,6 +1663,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     }
     function finish() {
       feedRun.running = false;
+      setTimeout(fetchLogos, 1500);
       state.feed.lastRun = Date.now();
       save(true); paintLive(); softRender();
       var ok = feedRun.done - feedRun.failed;
@@ -1915,6 +1944,53 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     gainPct: function (r) { return priced(r) && n(r.cost) ? (n(r.price) - n(r.cost)) / n(r.cost) : -Infinity; }
   };
   var HCOLS = [['ticker', 'Ticker'], ['company', 'Company'], ['type', 'Type'], ['qty', 'Qty', 1], ['cost', 'Cost / share', 1], ['price', 'Price', 1], ['day', 'Day', 1], ['value', 'Market value', 1], ['gain', 'Gain / loss', 1], ['gainPct', 'Gain %', 1]];
+  /* Company logos: looked up once per ticker from Finnhub's company profile (with the Finnhub key), and only the
+     image address is kept on the holding. Holdings without a logo (most ETFs and funds, private shares) get a
+     monogram: the ticker's letters on a color picked from the ticker, so it's always the same. */
+  var logoRun = false;
+  function fetchLogos() {
+    var key = (prefs.keys.finnhub || '').trim();
+    if (!key || logoRun || ui.demo || outdated || state.meta.sample) return;
+    var todo = state.stocks.filter(function (r) { return r.logoChecked == null && r.type !== 'Private' && (r.symbol || r.ticker); });
+    if (!todo.length) return;
+    logoRun = true;
+    var i = 0, changed = false;
+    (function next() {
+      var r = todo[i++];
+      if (!r) { logoRun = false; if (changed) { save(true); softRender(); } return; }
+      var sym = String(r.symbol || r.ticker).trim().toUpperCase();
+      fetchJson('https://finnhub.io/api/v1/stock/profile2?symbol=' + encodeURIComponent(sym) + '&token=' + encodeURIComponent(key)).then(function (j) {
+        var rec = findStock(r.id);
+        if (rec) { rec.logo = j && /^https:\/\//.test(j.logo || '') ? j.logo : ''; rec.logoChecked = Date.now(); changed = true; }
+      }, function (err) {
+        // Rate limit, bad key or no connection: stop and try again later. Anything else: no logo for this one.
+        if (err.fatal) { i = todo.length; return; }
+        var rec = findStock(r.id); if (rec) { rec.logo = ''; rec.logoChecked = Date.now(); changed = true; }
+      }).then(function () { setTimeout(next, 1100); });
+    })();
+  }
+  var MONO_COLORS = ['--c-eq', '--c-st', '--c-k4', '--c-cc', '--c-sv'];
+  function logoHtml(r, cls) {
+    var t = String(r.ticker || '?').toUpperCase().replace(/[^A-Z0-9]/g, '') || '?', h = 0;
+    for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) % 9973;
+    var mono = t.slice(0, 5);
+    // The monogram sits underneath; a logo that fails to load removes itself and the monogram shows.
+    return '<span class="logo ' + (cls || '') + ' l' + mono.length + '" style="--c:var(' + MONO_COLORS[h % MONO_COLORS.length] + ')" aria-hidden="true">' + esc(mono) +
+      (r.logo ? '<img src="' + esc(r.logo) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onload="this.classList.add(\'ok\')" onerror="this.remove()">' : '') + '</span>';
+  }
+  var PHONE_SORTS = [['value', -1, 'Value, highest first'], ['day', -1, 'Today, best first'], ['day', 1, 'Today, worst first'], ['gain', -1, 'Gain, highest first'], ['gainPct', -1, 'Gain %, highest first'], ['ticker', 1, 'Ticker, A to Z']];
+  function holdingCard(r) {
+    var p = priced(r), qty = n(r.qty), cost = qty * n(r.cost), mv = p ? qty * n(r.price) : null, g = p ? mv - cost : null, d = dayOf(r);
+    var tag = r.manual ? '<span class="tag">Manual</span>' : r.quoteError ? '<span class="tag warn">Not updated</span>' : '';
+    var cls = function (v) { return v < 0 ? 'neg' : 'pos'; };
+    return '<button type="button" class="hc' + (ui.flash[r.id] ? ' flash' : '') + '" data-act="edit" data-cat="stocks" data-id="' + esc(r.id) + '" aria-label="Edit ' + esc(r.ticker) + '">' + logoHtml(r) +
+      '<span class="hc-main">' +
+      '<span class="hc-row"><span class="hc-tk">' + esc(r.ticker) + tag + '</span><b class="hc-val">' + (p ? money2(mv) : 'No price') + '</b></span>' +
+      '<span class="hc-row"><span class="hc-co">' + esc(r.company || r.type || '') + '</span>' + (d ? '<span class="' + cls(d.chg) + '">' + (d.chg < 0 ? '▼ ' : '▲ ') + sgnPct(d.pct) + ' today</span>' : '<span class="muted">—</span>') + '</span>' +
+      '<span class="hc-row hc-sub"><span>' + qty.toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' sh · ' + (p ? money2(n(r.price)) : 'cost ' + money2(n(r.cost))) + '</span>' +
+      (p ? '<span class="' + cls(g) + '">' + signed(g) + (cost ? ' · ' + sgnPct(g / cost * 100) : '') + '</span>' : '<span class="muted">—</span>') + '</span>' +
+      '</span></button>';
+  }
   function renderStocks() {
     var t = totals(state), list = state.stocks.slice(), s = ui.sort, get = SORTS[s.key] || SORTS.ticker;
     list.sort(function (a, b) {
@@ -1939,7 +2015,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       var status = r.manual ? '<span class="tag">Manual</span>' : r.quoteError ? '<span class="tag warn" title="' + esc(r.quoteError) + '">Not updated</span>' : r.quoteTime ? '<span class="subline">' + esc((r.quoteSource || 'Updated') + ' · ' + when(r.quoteTime)) + '</span>' : '';
       var na = '<span class="na">Unavailable</span>';
       return '<tr>' +
-        '<td class="lead" data-label="Ticker"><span class="tk">' + esc(r.ticker) + '</span><br>' + status + '</td>' +
+        '<td class="lead" data-label="Ticker"><span class="tk-cell">' + logoHtml(r, 'sm') + '<span><span class="tk">' + esc(r.ticker) + '</span><br>' + status + '</span></span></td>' +
         '<td data-label="Company">' + esc(r.company) + '</td>' +
         '<td data-label="Type" class="muted">' + esc(r.type) + '</td>' +
         '<td class="num" data-label="Qty">' + n(r.qty).toLocaleString('en-US', { maximumFractionDigits: 4 }) + '</td>' +
@@ -1955,7 +2031,14 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<td class="num" data-label="Day">' + (t.dayKnown ? '<span class="' + (t.dayChange < 0 ? 'neg' : 'pos') + '">' + signed(t.dayChange) + '</span>' : '') + '</td>' +
       '<td class="num" data-label="Market value">' + money2(t.stocks) + '</td><td class="num" data-label="Gain / loss"><span class="' + (t.stockGain < 0 ? 'neg' : 'pos') + '">' + signed(t.stockGain, usd2) + '</span></td>' +
       '<td class="num" data-label="Gain %">' + (t.stockCostPriced ? sgnPct(t.stockGain / t.stockCostPriced * 100) : '') + '</td><td class="blank"></td></tr></tfoot>' : '';
-    var table = list.length ? '<div class="tablewrap"><table class="rt" style="min-width:1020px">' + '<thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody>' + foot + '</table></div>'
+    // Phone: one compact card per holding, a sort menu and a total line, in place of the table.
+    var sortOpts = PHONE_SORTS.map(function (o) { return '<option value="' + o[0] + ':' + o[1] + '"' + (s.key === o[0] && s.dir === o[1] ? ' selected' : '') + '>' + o[2] + '</option>'; }).join('');
+    var cards = '<div class="hcards"><div class="hc-bar"><label for="hsort">Sort</label><select id="hsort" class="mini" data-fk="hsort">' +
+      (PHONE_SORTS.some(function (o) { return s.key === o[0] && s.dir === o[1]; }) ? '' : '<option selected disabled>Choose</option>') + sortOpts + '</select></div>' +
+      list.map(holdingCard).join('') +
+      '<div class="hc-total"><span>Total · ' + list.length + ' holding' + (list.length === 1 ? '' : 's') + '</span><b>' + money2(t.stocks) + '</b>' +
+      '<span>' + (t.dayKnown ? 'Today <b class="' + (t.dayChange < 0 ? 'neg' : 'pos') + '">' + signed(t.dayChange) + '</b> · ' : '') + 'Gain <b class="' + (t.stockGain < 0 ? 'neg' : 'pos') + '">' + signed(t.stockGain) + (t.stockCostPriced ? ' (' + sgnPct(t.stockGain / t.stockCostPriced * 100) + ')' : '') + '</b></span></div></div>';
+    var table = list.length ? '<div class="tablewrap st-table"><table class="rt" style="min-width:1020px">' + '<thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody>' + foot + '</table></div>' + cards
       : '<div class="empty">No holdings yet. Add your first position to include it in totals and projections.</div>';
     var s2 = feedStatus();
     return '<header class="head"><div><div class="eyebrow">Stocks &amp; funds</div><h1>' + (feedKey() ? 'Holdings, priced live.' : 'Stocks, funds, and private holdings.') + '</h1></div>' +
@@ -1964,7 +2047,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<div><span>Market value</span><b class="si-total">' + money2(t.stocks) + '</b></div></div></div>' +
       '<p>' + (unpriced.length ? 'Priced positions only. ' + esc(unpriced.map(function (r) { return r.ticker; }).join(', ')) + ' ' + (unpriced.length === 1 ? 'has' : 'have') + ' no market price and ' + (unpriced.length === 1 ? 'is' : 'are') + ' left out.' : 'Every position has a price.') + '</p></article>' +
       '<article class="card keys"><div class="eyebrow">Performance</div><div class="key-grid">' + keyItems + '</div></article></div>' +
-      '<section class="card panel" aria-labelledby="hTitle"><div class="panel-head"><div><h2 id="hTitle">Holdings</h2><p>Select a column heading to sort. Type a price and press Enter or Tab to save it.</p></div><span class="mono muted" style="font-size:11px">' + state.stocks.length + ' positions · USD</span></div>' +
+      '<section class="card panel" aria-labelledby="hTitle"><div class="panel-head"><div><h2 id="hTitle">Holdings</h2><p><span class="desk-only">Select a column heading to sort. Type a price and press Enter or Tab to save it.</span><span class="phone-only">Tap a holding to edit it or enter a price.</span></p></div><span class="mono muted" style="font-size:11px">' + state.stocks.length + ' positions · USD</span></div>' +
       '<div class="toolbar"><p><span class="chip ' + s2.cls + '" data-feed-chip>' + esc(s2.text) + '</span></p><label for="autoStocks">Auto-refresh ' + autoSelect('autoStocks') + '</label></div>' +
       table + '</section>' +
       '<p class="note">Prices you type are kept until the next live refresh. Holdings marked Manual, such as private shares, are never overwritten. Day change compares the latest price with the previous close from the price feed.</p>';
@@ -3147,6 +3230,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     var list = state[dlgCtx.cat], old = dlgCtx.id ? list.filter(function (r) { return r.id === dlgCtx.id; })[0] : null;
     var rec = Object.assign(dlgCtx.cat === 'stocks' ? { prevClose: null, quoteTime: null, quoteSource: '', quoteError: null } : {}, old || {}, vals);
     if (dlgCtx.cat === 'stocks' && (!old || old.price !== vals.price)) { rec.prevClose = null; rec.quoteError = null; rec.quoteTime = vals.price === null ? null : Date.now(); rec.quoteSource = vals.price === null ? '' : 'Entered'; }
+    // A new or changed ticker looks up its logo again.
+    if (dlgCtx.cat === 'stocks' && (!old || old.ticker !== rec.ticker || old.symbol !== rec.symbol)) { rec.logo = ''; rec.logoChecked = null; setTimeout(fetchLogos, 800); }
     if (old) { rec.id = old.id; list[list.indexOf(old)] = rec; } else { rec.id = uid(); list.push(rec); }
     var wasEdit = !!old, replaced = dlgCtx.replace;
     if (replaced) state[dlgCtx.cat] = state[dlgCtx.cat].filter(function (r) { return r.id !== replaced; });
@@ -3364,6 +3449,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       else if (fk === 'autoMins' || fk === 'marketHoursOnly') setTimeout(autoTick, 50);
       return;
     }
+    if (el.id === 'hsort') { var sp = el.value.split(':'); ui.sort = { key: sp[0], dir: +sp[1] }; render(); return; }
     if (el.id === 'feedKey') { prefs.keys[state.feed.provider] = el.value.trim(); savePrefs(); paintLive(); }
     if (el.id === 'feedKey2') { prefs.keys[altProvider()] = el.value.trim(); savePrefs(); }
   });
