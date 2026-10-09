@@ -486,6 +486,12 @@ dialog h2{font-size:20px}
   .side{display:none}
   main{padding:18px 16px 30px}
   .topline [data-feed-chip]{display:none}
+  /* Phone: data indicator and save status share one row; the indicator drops its extra words, the status trims to fit. */
+  .topline{flex-wrap:nowrap;margin-bottom:22px}
+  .topline .flag{flex:none}
+  .flag .flag-x{display:none}
+  .topline .actions{flex:1 1 auto;min-width:0;justify-content:flex-end;flex-wrap:nowrap}
+  .topline [data-save-status]{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ledger{padding:22px 20px;border-radius:18px;gap:24px}
   .ledger::after{width:150px;height:150px;border-width:28px;right:-95px;top:-90px}
   .big{font-size:36px}
@@ -1091,7 +1097,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.10.07', APP_BUILD = 2026100707;
+  var APP_VERSION = '2026.10.08', APP_BUILD = 2026100801;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -1722,8 +1728,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     var s = feedStatus();
     // Which data is on screen: green for yours, amber for the made-up sample (links to Settings, where you switch or sign in).
     var flag = state.meta.sample
-      ? '<a class="flag sample" href="#/settings" title="Made-up data. Switch back or sign in to OneDrive under Settings."><b>Sample data</b> · made up · not financial advice</a>'
-      : '<div class="flag real"><b>Your data</b> · not financial advice</div>';
+      ? '<a class="flag sample" href="#/settings" title="Made-up data. Switch back or sign in to OneDrive under Settings."><b>Sample data</b><span class="flag-x"> · made up · not financial advice</span></a>'
+      : '<div class="flag real"><b>Your data</b><span class="flag-x"> · not financial advice</span></div>';
     return '<div class="topline">' + flag +
       '<div class="actions"><span class="chip" data-save-status>' + esc(saveText()) + '</span><span class="chip ' + s.cls + '" data-feed-chip>' + esc(s.text) + '</span></div></div>';
   }
