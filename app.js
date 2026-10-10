@@ -703,7 +703,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.10.09', APP_BUILD = 2026100907;
+  var APP_VERSION = '2026.10.10', APP_BUILD = 2026100908;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
