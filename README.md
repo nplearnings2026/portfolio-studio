@@ -8,7 +8,8 @@ This repository holds only the page. **No financial data or API keys are stored 
 
 | File | Purpose |
 |---|---|
-| `index.html` | The whole app |
+| `index.html` | The page and its styles, plus the security policy |
+| `app.js` | All the app's code |
 | `manifest.webmanifest`, `icon*.png`, `icon.svg` | Lets phones install it from the home screen |
 | `sw.js` | Offline cache, so the app opens without a connection |
 
@@ -47,7 +48,7 @@ Enter your price-feed API key on each device under **Settings → Live price fee
 - **Old versions:** if a copy of the app finds data saved by a newer version, it pauses saving and syncing and asks you to reload.
 - **Offline:** changes stay on the device and upload when it's back online.
 - **Sign-in:** Microsoft sign-in for browser apps lasts about 24 hours. After that, the app signs you back in automatically when it opens, as long as your Microsoft session is still active. Otherwise a **Sign in again** banner appears.
-- **Sign out on this device:** stops syncing on that device. Its data stays on the device, and the file stays in OneDrive.
+- **Sign out on this device:** uploads any changes not yet in OneDrive, then removes your data, history and backups from that device, which then shows sample data. If it can't reach OneDrive and there are unsent changes, it warns you first. Price-feed keys stay. The file stays in OneDrive, and signing in again loads it.
 
 ## Test locally
 
@@ -61,6 +62,6 @@ Then open `http://localhost:8080/`. Opening `index.html` straight from disk work
 
 ## Updating the app
 
-Raise `APP_BUILD` (and `APP_VERSION`) near the top of the app code in `index.html` with every change, then replace `index.html` (and any other changed file) in the repository. Changes appear the next time the app opens online. On a phone, close the app fully and reopen it.
+Raise `APP_BUILD` (and `APP_VERSION`) near the top of `app.js` with every change, and set the same number in `index.html`'s `<script src="app.js?v=…">`. Then replace the changed files in the repository, usually `app.js` and `index.html` together. Changes appear the next time the app opens online. On a phone, close the app fully and reopen it.
 
 Calculation rules for every number in the app are documented separately in `PORTFOLIO-STUDIO-RULES.md`.

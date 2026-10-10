@@ -2,7 +2,7 @@
 // and from this cache when offline. Only this site's own files are cached; sign-in, OneDrive and price
 // requests always go to the network.
 const CACHE = 'portfolio-studio-v1';
-const FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png'];
+const FILES = ['./', './index.html', './app.js', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
