@@ -21,7 +21,8 @@ function defaultSettings() {
     taxCapGains: 15, taxState: 0, taxInterest: 22, taxK401: 22, afterTax: false,
     goalAge: 50, goalRetireAge: 65, goalMonthly: 14167, goalRate: 4,
     planAge: 95, ssBenefit: 0, ssClaimAge: 67, ssSpouseBenefit: 0, ssSpouseAge: 50, ssSpouseClaimAge: 67, ssCut: 0, otherIncome: 0, otherStartAge: 65,
-    autoSnap: true, histRange: 'all', histAfterTax: false, tickerMarket: true };
+    autoSnap: true, histRange: 'all', histAfterTax: false, tickerMarket: true, mcVolStocks: 16, mcVol401: 12,
+    concStock: 15, concIndustry: 40, concInsure: 250000, concCash: 25 };
 }
 function defaultFeed() {
   return { provider: 'finnhub', autoMins: 0, marketHoursOnly: true, lastRun: null };
@@ -127,7 +128,31 @@ function wavg(items, balKey) {
 // Net worth history: one entry per day with the breakdown, so changes can be explained later.
 function snapEntry(s, date) {
   var t = totals(s), tn = taxNow(s), r2 = function (v) { return Math.round(v * 100) / 100; };
-  return { date: date, t: Date.now(), net: r2(t.net), netAfter: r2(t.net - tn.total), stocks: r2(t.stocks), k401: r2(t.k401), cds: r2(t.cds), cash: r2(t.cash), assets: r2(t.assets), mortgage: r2(t.mortgage) };
+  return { date: date, t: Date.now(), net: r2(t.net), netAfter: r2(t.net - tn.total), stocks: r2(t.stocks), k401: r2(t.k401), cds: r2(t.cds), cash: r2(t.cash), assets: r2(t.assets), mortgage: r2(t.mortgage), stockCost: r2(t.stockCostPriced) };
+}
+/* "What changed" by cause: splits the change in net worth since a snapshot into money you added, market moves,
+   interest, loans paid down and property value. Needs the snapshot's stock cost basis (saved since build 2026100907).
+   - Stocks: added = change in cost basis of priced holdings (buying raises it, selling lowers it); market = the rest.
+   - 401(k): added = your yearly contributions setting, prorated over the period; market = the rest. If the balance
+     wasn't updated in the period (no change), both are 0, since a stale balance says nothing about either.
+   - Cash & CDs: interest = average balance × APY over the period (savings only if their balance changed, since CDs
+     accrue by themselves); added = the rest (deposits less withdrawals; moves between savings and CDs cancel out).
+   - Loans paid down = fall in loan balances. Property value = change in estimated values.
+   The five parts always add up to the change in net worth. */
+function changeCauses(s, base, days) {
+  if (!base || base.stockCost == null) return null;
+  var t = totals(s), yrs = Math.max(0, days) / 365.25, r2 = function (v) { return Math.round(v * 100) / 100; };
+  var dS = t.stocks - base.stocks, addS = t.stockCostPriced - base.stockCost, mktS = dS - addS;
+  var dK = t.k401 - base.k401, k4stale = Math.abs(dK) < 1, addK = k4stale ? 0 : s.k401.reduce(function (a, r) { return a + n(r.contrib); }, 0) * yrs, mktK = k4stale ? 0 : dK - addK;
+  var growth = function (bal, apy) { return bal * (Math.pow(1 + apy / 100, yrs) - 1); };
+  var cdApy = wavg(s.cds.map(function (c) { return { balance: cdValueNow(c), apy: c.apy }; }), 'balance');
+  var dCash = t.cash - base.cash, cashStale = Math.abs(dCash) < 1;
+  var intCd = growth((t.cds + base.cds) / 2, cdApy), intCash = cashStale ? 0 : growth((t.cash + base.cash) / 2, wavg(s.cash, 'balance'));
+  var dC = t.cash + t.cds - base.cash - base.cds, interest = intCd + intCash, addC = dC - interest;
+  return {
+    added: addS + addK + addC, market: mktS + mktK, interest: interest, loans: base.mortgage - t.mortgage, property: t.assets - base.assets, total: t.net - base.net,
+    addS: addS, addK: addK, addC: addC, mktS: mktS, mktK: mktK, k4stale: k4stale, cashStale: cashStale, yrs: yrs
+  };
 }
 // Combine two histories by date; when both have a day, the entry recorded later wins.
 function mergeHistory(a, b) {
@@ -249,6 +274,127 @@ function lifePlan(s) {
     cash *= 1 + gC; stocks *= 1 + gS; k4 *= 1 + gK; basis /= 1 + inf;   // basis is fixed in dollars, so it shrinks in today's dollars
   }
   return { endAge: END, rows: rows, age0: age0, R: R, ssStart: ssStart, ranOut: ranOut, end: rows[rows.length - 1].total, spend: spend, streams: streams };
+}
+
+/* Monte Carlo "chance of success": the lifetime plan above, replayed in many simulated markets where each year's return
+   is random instead of steady. Everything else is the same plan: contributions while working (taken from the steady
+   projection), then the same withdrawals, order and taxes in retirement, in today's dollars to the plan-until age.
+   - Yearly real returns are lognormal with the median at the plan's steady rate, so the middle future follows the
+     steady plan and the bands show the luck around it. Swings are the settings "How much stocks / the 401(k) swing".
+   - The 401(k) moves with stocks (correlation 0.85). Cash and CDs don't swing.
+   - A fixed random seed makes the result repeatable: the same plan always gives the same percentage.
+   Success = savings cover all spending in every year to the plan-until age. */
+var MC_PATHS = 1000, MC_RHO = 0.85, mcCache = {}, mcKeys = [];
+function mcRand(seed) {   // mulberry32 with Box-Muller normals
+  var a = seed >>> 0, spare = null;
+  var u = function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  return function () {
+    if (spare !== null) { var x = spare; spare = null; return x; }
+    var r, v1, v2; do { v1 = u() * 2 - 1; v2 = u() * 2 - 1; r = v1 * v1 + v2 * v2; } while (r >= 1 || r === 0);
+    var f = Math.sqrt(-2 * Math.log(r) / r); spare = v2 * f; return v1 * f;
+  };
+}
+function monteCarlo(s) {
+  var st = s.settings;
+  var key = JSON.stringify([st, ORDER.map(function (k) { return s[k]; })]);
+  if (mcCache[key]) return mcCache[key];
+  var END = planEnd(st), age0 = Math.round(n(st.goalAge)) || 50;
+  var R = Math.min(END - 1, Math.max(age0 + 1, Math.round(n(st.goalRetireAge)) || 65));
+  var sim = Object.assign({}, s, { settings: Object.assign({}, st, { real: true, horizon: Math.min(40, R - age0) }) });
+  var acc = project(sim), tx = taxRates(st), sc = SCEN[st.scenario] || SCEN.base, inf = n(st.inflation) / 100;
+  var real = function (g) { return (1 + g) / (1 + inf) - 1; };
+  var gS = real((n(st.stocksGrowth) + sc.mkt) / 100), gK = real((n(st.k401Growth) + sc.mkt) / 100);
+  var gC = real(wavg(s.cash, 'balance') / 100 * (1 - Math.min(0.99, tx.interest)));
+  var sig = function (v, g) { v = Math.max(0, n(v)) / 100; return Math.sqrt(Math.log(1 + v * v / ((1 + g) * (1 + g)))); };
+  var sS = sig(st.mcVolStocks, gS), sK = sig(st.mcVol401, gK), rho = MC_RHO, rho2 = Math.sqrt(1 - rho * rho);
+  var streams = retireIncome(st), spend = n(st.goalMonthly) * 12;
+  // What the steady plan adds each working year, so random returns can be applied to the same contributions.
+  var addS = [], addK = [];
+  for (var y = 0; y + 1 < acc.length; y++) { addS.push(acc[y + 1].stocks - acc[y].stocks * (1 + gS)); addK.push(acc[y + 1].k401 - acc[y].k401 * (1 + gK)); }
+  var last = acc[acc.length - 1], basisR = Math.max(0, last.stocks - last.gainStocks);
+  var ages = []; for (var a0 = age0; a0 <= END; a0++) ages.push(a0);
+  var A = ages.length, totals = ages.map(function () { return new Float64Array(MC_PATHS); }), alive = new Float64Array(A), outAge = [];
+  var Z = mcRand(20261009);
+  for (var p = 0; p < MC_PATHS; p++) {
+    var S = acc[0].stocks, K = acc[0].k401, C, failed = null, i = 0;
+    for (y = 0; y < acc.length - 1; y++, i++) {
+      totals[i][p] = S + K + acc[y].cash + acc[y].cds; alive[i]++;
+      var z1 = Z(), z2 = rho * z1 + rho2 * Z();
+      S = Math.max(0, S * (1 + gS) * Math.exp(sS * z1) + addS[y]); K = Math.max(0, K * (1 + gK) * Math.exp(sK * z2) + addK[y]);
+    }
+    C = last.cash + last.cds;
+    var basis = Math.min(basisR, S);
+    for (var a = R; a <= END; a++, i++) {
+      totals[i][p] = C + S + K;   // like the lifetime plan: what's there at the start of the year, before that year's spending
+      var inc = 0; for (var j = 0; j < streams.length; j++) if (a >= streams[j].startAge) inc += streams[j].net * 12;
+      var need = Math.max(0, spend - inc), w = Math.min(C, need); C -= w; need -= w;
+      if (need > 0.5 && S > 0) { var keep = 1 - Math.max(0, (S - basis) / S) * tx.cap, gross = Math.min(S, need / keep); basis -= basis * (gross / S); S -= gross; need -= gross * keep; }
+      if (need > 0.5 && K > 0) { var keep2 = 1 - Math.min(0.99, tx.k401), gross2 = Math.min(K, need / keep2); K -= gross2; need -= gross2 * keep2; }
+      if (need > 1 && failed === null) failed = a;
+      if (failed === null) alive[i]++;
+      var r1 = Z(), r2 = rho * r1 + rho2 * Z();
+      C *= 1 + gC; S *= (1 + gS) * Math.exp(sS * r1); K *= (1 + gK) * Math.exp(sK * r2); basis /= 1 + inf;
+    }
+    outAge.push(failed === null ? END + 1 : failed);
+  }
+  var q = function (arr, f) { var b = Array.prototype.slice.call(arr).sort(function (x, y) { return x - y; }); return b[Math.min(b.length - 1, Math.floor(f * b.length))]; };
+  var rows = ages.map(function (age, k) {
+    return { age: age, p10: q(totals[k], 0.1), p25: q(totals[k], 0.25), p50: q(totals[k], 0.5), p75: q(totals[k], 0.75), p90: q(totals[k], 0.9), alive: alive[k] / MC_PATHS };
+  });
+  outAge.sort(function (x, y) { return x - y; });
+  var ok = outAge.filter(function (x) { return x > END; }).length;
+  var res = { paths: MC_PATHS, endAge: END, R: R, age0: age0, rows: rows, success: ok / MC_PATHS, worst10: outAge[Math.floor(0.1 * MC_PATHS)] > END ? null : outAge[Math.floor(0.1 * MC_PATHS)],
+    medianOut: outAge[Math.floor(0.5 * MC_PATHS)] > END ? null : outAge[Math.floor(0.5 * MC_PATHS)], p10End: rows[rows.length - 1].p10 };
+  mcCache[key] = res; mcKeys.push(key); if (mcKeys.length > 12) delete mcCache[mcKeys.shift()];
+  return res;
+}
+
+/* Concentration checks: places where too much depends on one thing. Each finding carries the numbers and the ids of
+   the items involved (for highlighting); the page turns them into words. level 'warn' = worth a look, 'info' = context.
+   1. One company: a stock or private holding (same ticker combined) above concStock % of investments (stocks & funds + 401(k)).
+      Funds (ETF, Mutual Fund) are already spread out and aren't flagged.
+   2. One industry: with 3+ individual stocks whose industry is known, the largest industry above concIndustry % of them.
+   3. Insurance limit: CDs (value today) plus savings at one bank above concInsure. Grouped by the Bank field, else the name.
+   4. Property share (info): property minus loans above half of net worth.
+   5. Cash above reserve: savings and CDs beyond the cash reserve worth more than concCash % of investable money. */
+function concFindings(s) {
+  var st = s.settings, t = totals(s), out = [], inv = t.stocks + t.k401;
+  var by = {};
+  s.stocks.forEach(function (r) {
+    if (!priced(r) || (r.type !== 'Stock' && r.type !== 'Private')) return;
+    var k = String(r.ticker || '').toUpperCase(); if (!k) return;
+    by[k] = by[k] || { ticker: k, company: r.company || '', v: 0, ids: [] }; by[k].v += n(r.qty) * n(r.price); by[k].ids.push(r.id);
+  });
+  var lim = n(st.concStock) / 100;
+  if (inv > 0 && lim > 0) Object.keys(by).forEach(function (k) {
+    var x = by[k], share = x.v / inv;
+    if (share > lim) out.push({ key: 'stock-' + k, level: 'warn', kind: 'stock', ticker: k, company: x.company, value: x.v, share: share, limit: lim, base: inv, ids: x.ids });
+  });
+  out.sort(function (a, b) { return b.share - a.share; });
+  var ind = {}, indTot = 0, nInd = 0;
+  s.stocks.forEach(function (r) {
+    if (!priced(r) || r.type !== 'Stock' || !r.industry) return;
+    var v = n(r.qty) * n(r.price); ind[r.industry] = ind[r.industry] || { v: 0, ids: [], n: 0 }; ind[r.industry].v += v; ind[r.industry].ids.push(r.id); ind[r.industry].n++; indTot += v; nInd++;
+  });
+  var top = Object.keys(ind).sort(function (a, b) { return ind[b].v - ind[a].v; })[0], ilim = n(st.concIndustry) / 100;
+  if (nInd >= 3 && indTot > 0 && ilim > 0 && ind[top].v / indTot > ilim) out.push({ key: 'industry', level: 'warn', kind: 'industry', industry: top, value: ind[top].v, share: ind[top].v / indTot, limit: ilim, count: ind[top].n, of: nInd, base: indTot, ids: ind[top].ids });
+  var banks = {}, cap = n(st.concInsure);
+  var add = function (r, v, cat) {
+    var label = String(r.bank || r.name || '').trim(), k = label.toLowerCase(); if (!k) return;
+    banks[k] = banks[k] || { bank: label, v: 0, cds: 0, accts: 0, ids: [], named: !!r.bank }; banks[k].v += v; banks[k][cat]++; banks[k].ids.push(r.id);
+  };
+  s.cds.forEach(function (r) { add(r, cdValueNow(r), 'cds'); });
+  s.cash.forEach(function (r) { add(r, n(r.balance), 'accts'); });
+  if (cap > 0) Object.keys(banks).forEach(function (k) {
+    var b = banks[k]; if (b.v > cap) out.push({ key: 'bank-' + k, level: 'warn', kind: 'bank', bank: b.bank, value: b.v, over: b.v - cap, limit: cap, cds: b.cds, accts: b.accts, ids: b.ids });
+  });
+  var unnamed = s.cds.concat(s.cash).filter(function (r) { return !String(r.bank || '').trim(); }).length;
+  var equity = t.assets - t.mortgage;
+  if (t.net > 0 && equity > 0 && equity / t.net > 0.5) out.push({ key: 'property', level: 'info', kind: 'property', value: equity, share: equity / t.net, net: t.net, ids: s.assets.map(function (r) { return r.id; }) });
+  var reserve = n(st.monthlyExpenses) * n(st.reserveMonths), cashAll = t.cash + t.cds, extra = cashAll - reserve, clim = n(st.concCash) / 100;
+  if (reserve > 0 && clim > 0 && t.investable > 0 && extra > clim * t.investable) out.push({ key: 'cash', level: 'warn', kind: 'cash', value: cashAll, reserve: reserve, extra: extra, times: cashAll / reserve, share: extra / t.investable, limit: clim, months: n(st.reserveMonths), ids: s.cds.concat(s.cash).map(function (r) { return r.id; }) });
+  out.unnamedBanks = unnamed;
+  return out;
 }
 
 // One row per year; each step is 12 months from today.
@@ -531,12 +677,14 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       { key: 'apy', label: 'APY (%)', type: 'number', min: 0, req: true },
       { key: 'opened', label: 'Opened', type: 'date' },
       { key: 'term', label: 'Term (months)', type: 'number', min: 1, nullable: true, hint: 'Fills in the maturity date from the opened date. Changing the maturity date updates the term.' },
-      { key: 'matures', label: 'Matures', type: 'date' }
+      { key: 'matures', label: 'Matures', type: 'date' },
+      { key: 'bank', label: 'Bank or credit union', type: 'text', hint: 'Groups what you hold at each bank for the $250,000 insurance check in Insights. Use the same spelling on each CD and account at that bank.' }
     ] },
     cash: { label: 'Savings & checking', one: 'account', fields: [
       { key: 'name', label: 'Account name', type: 'text', req: true },
       { key: 'balance', label: 'Balance ($)', type: 'number', min: 0, req: true },
-      { key: 'apy', label: 'APY (%)', type: 'number', min: 0 }
+      { key: 'apy', label: 'APY (%)', type: 'number', min: 0 },
+      { key: 'bank', label: 'Bank or credit union', type: 'text', hint: 'Groups what you hold at each bank for the $250,000 insurance check in Insights. Use the same spelling on each CD and account at that bank.' }
     ] },
     assets: { label: 'Property & assets', one: 'asset', fields: [
       { key: 'name', label: 'Asset', type: 'text', req: true },
@@ -555,7 +703,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.10.09', APP_BUILD = 2026100904;
+  var APP_VERSION = '2026.10.09', APP_BUILD = 2026100907;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -1449,7 +1597,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<div class="bal-bar" role="img" aria-label="' + esc(barLabel) + '">' + bar + '</div><div class="legend">' + legend + '</div></div></article>' +
       tickerTape() +
       '<section class="section"><div class="section-head"><h2>Accounts at a glance</h2><p>Every part of the balance sheet, grouped by the job it does. Select a row to edit it.</p></div>' +
-      '<div class="acct-layout"><div class="card acct-list">' + rows + '</div><div class="stack">' + moversCard() + goalMini() +
+      '<div class="acct-layout"><div class="card acct-list">' + rows + '</div><div class="stack">' + moversCard() + concCard() + goalMini() +
       '<article class="card insight"><h3>Coming up</h3>' + timeline + '</article>' + nextMove + '</div></div></section>' +
       chart;
   }
@@ -1480,7 +1628,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   function fetchLogos() {
     var key = (prefs.keys.finnhub || '').trim();
     if (!key || logoRun || ui.demo || outdated || state.meta.sample) return;
-    var todo = state.stocks.filter(function (r) { return r.logoChecked == null && r.type !== 'Private' && (r.symbol || r.ticker); });
+    // Also stocks looked up before industries were kept, so the industry check can use them.
+    var todo = state.stocks.filter(function (r) { return (r.logoChecked == null || (r.type === 'Stock' && r.industry === undefined)) && r.type !== 'Private' && (r.symbol || r.ticker); });
     if (!todo.length) return;
     logoRun = true;
     var i = 0, changed = false;
@@ -1490,11 +1639,11 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       var sym = String(r.symbol || r.ticker).trim().toUpperCase();
       fetchJson('https://finnhub.io/api/v1/stock/profile2?symbol=' + encodeURIComponent(sym) + '&token=' + encodeURIComponent(key)).then(function (j) {
         var rec = findStock(r.id);
-        if (rec) { rec.logo = j && /^https:\/\//.test(j.logo || '') ? j.logo : ''; rec.logoChecked = Date.now(); changed = true; }
+        if (rec) { rec.logo = j && /^https:\/\//.test(j.logo || '') ? j.logo : ''; rec.industry = j && typeof j.finnhubIndustry === 'string' ? j.finnhubIndustry.slice(0, 60) : ''; rec.logoChecked = Date.now(); changed = true; }
       }, function (err) {
         // Rate limit, bad key or no connection: stop and try again later. Anything else: no logo for this one.
         if (err.fatal) { i = todo.length; return; }
-        var rec = findStock(r.id); if (rec) { rec.logo = ''; rec.logoChecked = Date.now(); changed = true; }
+        var rec = findStock(r.id); if (rec) { rec.logo = ''; rec.industry = ''; rec.logoChecked = Date.now(); changed = true; }
       }).then(function () { setTimeout(next, 1100); });
     })();
   }
@@ -1902,7 +2051,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       'Your savings' + (g.streams.length ? ' and guaranteed income' : '') + ' would support about <b>' + money0(g.incomeToday / 12) + ' a month</b> (' + money0(g.incomeToday) + ' a year) in today’s dollars at a ' + pct(g.rate * 100) + ' withdrawal rate.</p>' + incomeLine +
       '<p class="goal-note">Counts stocks, 401(k), CDs and savings after estimated taxes; home equity is left out. ' +
       'Needed = ' + money0(g.fromSavings / 12) + ' a month from savings ÷ ' + pct(g.rate * 100) + ' withdrawal rate' + (g.bridge > 0.5 ? ' + ' + money0(g.bridge) + ' bridge' : '') + ' = ' + money0(g.targetToday) + ' in today’s dollars' + (g.real ? '. ' : ', or ' + money0(g.target) + ' in ' + g.year + ' after ' + pct(n(st.inflation)) + ' yearly inflation. ') +
-      'Uses the scenario and contributions on the left.</p>' +
+      'Uses the scenario and contributions on the left.</p>' + mcLine() +
       '<div class="actions">' + (hz !== g.yrs ? '<button class="btn sm" data-act="horizon-goal">Show projections to ' + g.year + '</button>' : '') + '<a class="btn sm" href="#/settings">Change goal</a></div></article>';
   }
   function incomeSummary(g) {
@@ -1978,7 +2127,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     var on = g.gap <= 0;
     return '<article class="card insight"><div class="eyebrow">Retirement goal · ' + g.year + '</div><div class="metric ' + (on ? 'pos' : 'neg') + '">' + (on ? 'On track' : 'Short ' + short(g.gap)) + '</div>' +
       '<p>' + (on ? 'Projected ' + money0(g.after) + ' after tax at ' + g.age + ', above the ' + money0(g.target) + ' needed for ' + money0(g.monthly) + ' a month.' : 'About ' + money0(g.extra) + ' more a year would reach the ' + money0(g.target) + ' needed for ' + money0(g.monthly) + ' a month at ' + g.age + '.') + '</p>' +
-      '<a class="btn" href="#/projections">See the plan</a></article>';
+      mcLine() + '<a class="btn" href="#/projections">See the plan</a></article>';
   }
   function projOutputs() {
     return goalCard() + (state.settings.projView === 'accounts' ? blockOutputs() : combinedOutputs());
@@ -2334,6 +2483,41 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     return '<div class="viz-legend">' + items.map(function (it) { return '<span><i class="' + (it.line ? 'lk-line' : 'lk-area') + '" style="--c:' + it.c + '"></i>' + esc(it.label) + '</span>'; }).join('') + '</div>';
   }
 
+  /* Chance of success (Monte Carlo) display helpers. */
+  function mcPct(x) { return x >= 0.995 ? 'Over 99%' : x < 0.005 ? 'Under 1%' : Math.round(x * 100) + '%'; }
+  function mcCls(x) { return x >= 0.85 ? 'pos' : x >= 0.7 ? 'mc-mid' : 'neg'; }
+  function mcLine(s) {
+    var mc = monteCarlo(s || state);
+    return '<a class="mc-line" href="#/insights"><b class="' + mcCls(mc.success) + '">' + mcPct(mc.success) + '</b> chance the money lasts to ' + mc.endAge + ', with market ups and downs ›</a>';
+  }
+  // Fan chart: the middle 80% and middle 50% of simulated futures as shaded bands, the typical (median) future as a line,
+  // and the steady-returns plan as a dashed line for comparison.
+  function fanChart(id, rows, o) {
+    var nar = innerWidth < 680, W = nar ? 420 : 1000, H = nar ? 280 : 320, L = nar ? 46 : 64, R = nar ? 10 : 18, T = 18, B = 32;
+    var a0 = rows[0].age, a1 = rows[rows.length - 1].age;
+    var X = function (a) { return L + (a - a0) / ((a1 - a0) || 1) * (W - L - R); };
+    var mx = Math.max.apply(null, rows.map(function (r) { return Math.max(r.p90, r.plan || 0); }).concat([1]));
+    var step = niceStep(mx / 4), top = Math.ceil(mx / step) * step;
+    var Y = function (v) { return T + (H - T - B) * (1 - Math.max(0, v) / top); };
+    var line = function (k) { return rows.map(function (r, i) { return (i ? 'L' : 'M') + X(r.age).toFixed(1) + ',' + Y(r[k]).toFixed(1); }).join(' '); };
+    var band = function (lo, hi) { return line(hi) + ' ' + rows.slice().reverse().map(function (r) { return 'L' + X(r.age).toFixed(1) + ',' + Y(r[lo]).toFixed(1); }).join(' ') + ' Z'; };
+    var out = '';
+    for (var g = 0; g <= top + 1; g += step) out += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(g).toFixed(1) + '" y2="' + Y(g).toFixed(1) + '"/><text class="ax" x="' + (L - 8) + '" y="' + (Y(g) + 4).toFixed(1) + '" text-anchor="end">' + short(g) + '</text>';
+    out += '<path d="' + band('p10', 'p90') + '" class="fan-outer"/><path d="' + band('p25', 'p75') + '" class="fan-inner"/>';
+    out += '<path d="' + line('plan') + '" class="fan-plan"/><path d="' + line('p50') + '" class="fan-mid"/>';
+    (o.markers || []).forEach(function (m, i) {
+      if (m.age < a0 || m.age > a1) return;
+      var x = X(m.age);
+      out += '<line class="mk-line" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + T + '" y2="' + (H - B) + '"/><text class="mk-lab" x="' + (x + 5).toFixed(1) + '" y="' + (T + 14 + i * 15) + '">' + esc(m.label) + '</text>';
+    });
+    var every = nar ? 10 : (Math.max(1, Math.round((a1 - a0) / 9 / 5) * 5) || 5);
+    for (var a = Math.ceil(a0 / 5) * 5; a <= a1; a += every) out += '<text class="ax" x="' + X(a).toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle">' + a + '</text>';
+    out += '<text class="ax" x="' + (L - 8) + '" y="' + (H - 10) + '" text-anchor="end">Age</text>';
+    out += '<line class="xh-line" x1="0" x2="0" y1="' + T + '" y2="' + (H - B) + '"/><rect class="xh-hit" data-xh="' + id + '" x="' + L + '" y="' + T + '" width="' + (W - L - R) + '" height="' + (H - T - B) + '"/>';
+    XH[id] = { W: W, xs: rows.map(function (r) { return X(r.age); }), tip: o.tip };
+    return '<svg class="age-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(o.aria) + '" style="width:100%;height:auto;display:block">' + out + '</svg>';
+  }
+
   /* 1. Retirement what-if (sandbox) */
   function wiDefaults() {
     var st = state.settings;
@@ -2379,12 +2563,12 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   function wiOutputs() {
     var w = ui.whatIf, sb = realState(wiOver(w)), g = goalStatus(sb);
     if (!g.ok) return '<div class="empty">Set your current age, retirement age and retirement income in <a href="#/settings">Settings</a> first.</div>';
-    var p = lifePlan(sb), pb = lifePlan(realState());
+    var p = lifePlan(sb), pb = lifePlan(realState()), mc = monteCarlo(sb);
     var byAge = {}; pb.rows.forEach(function (r) { byAge[r.age] = r.total; });
     var rows = p.rows.map(function (r) { return { age: r.age, year: r.year, total: r.total, base: byAge[r.age] != null ? byAge[r.age] : null }; });
     var on = g.gap <= 0, lv = leverList(w);
     var stats = '<div class="ins-stats"><div><span>Retirement goal at ' + w.retire + '</span><b class="' + (on ? 'pos' : 'neg') + '">' + (on ? 'On track' : 'Short ' + short(g.gap)) + '</b><em>' + money0(g.after) + ' of ' + money0(g.target) + ' needed</em></div>' +
-      '<div><span>Money lasts</span><b class="' + (p.ranOut ? 'neg' : 'pos') + '">' + (p.ranOut ? 'Until age ' + p.ranOut : 'Past ' + p.endAge) + '</b><em>' + (p.ranOut ? 'Then ' + money0(p.spend / 12) + ' a month isn’t covered' : money0(p.end) + ' left at ' + p.endAge) + '</em></div>' +
+      '<div><span>Chance it lasts to ' + p.endAge + '</span><b class="' + mcCls(mc.success) + '">' + mcPct(mc.success) + '</b><em>With steady returns: ' + (p.ranOut ? 'runs out at ' + p.ranOut : 'lasts past ' + p.endAge) + '</em></div>' +
       '<div><span>Supports in retirement</span><b>' + money0(g.incomeToday / 12) + ' / mo</b><em>Goal ' + money0(w.spend) + ' / mo at a ' + pct(g.rate * 100) + ' withdrawal rate</em></div></div>';
     var markers = [{ age: w.retire, label: 'Retire ' + w.retire }];
     if (p.ssStart !== null && p.ssStart !== w.retire) markers.push({ age: p.ssStart, label: 'Social Security ' + Math.round(p.ssStart) });
@@ -2453,24 +2637,40 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
         return t;
       }
     });
-    var stats = '<div class="ins-stats"><div><span>Money lasts</span><b class="' + (p.ranOut ? 'neg' : 'pos') + '">' + (p.ranOut ? 'Until age ' + p.ranOut : 'Past age ' + p.endAge) + '</b><em>' + (p.ranOut ? 'Spending isn’t fully covered after that' : money0(p.end) + ' left at ' + p.endAge) + '</em></div>' +
-      '<div><span>Peak savings</span><b>' + money0(peak.total) + '</b><em>At age ' + peak.age + '</em></div>' +
+    var mc = monteCarlo(rs), view = ui.lastView === 'accounts' ? 'accounts' : 'range';
+    var stats = '<div class="ins-stats"><div><span>Chance it lasts to ' + p.endAge + '</span><b class="' + mcCls(mc.success) + '">' + mcPct(mc.success) + '</b><em>Of ' + mc.paths.toLocaleString('en-US') + ' simulated markets' + (mc.worst10 ? '; in the worst 10% it runs out by ' + mc.worst10 : '; even the worst 10% last') + '</em></div>' +
+      '<div><span>With steady returns</span><b class="' + (p.ranOut ? 'neg' : 'pos') + '">' + (p.ranOut ? 'Runs out at ' + p.ranOut : 'Lasts past ' + p.endAge) + '</b><em>Peak ' + money0(peak.total) + ' at age ' + peak.age + (p.ranOut ? '' : ' · ' + money0(p.end) + ' left at ' + p.endAge) + '</em></div>' +
       '<div><span>Spending in retirement</span><b>' + money0(p.spend / 12) + ' / mo</b><em>' + (p.streams.length ? money0(p.streams.reduce(function (a, x) { return a + x.net; }, 0)) + ' / mo guaranteed once all income starts' : 'No guaranteed income entered') + '</em></div></div>';
     var table = '<details class="tbl"><summary>Show as a table</summary><div class="tablewrap"><table><thead><tr><th>Age</th><th>Year</th><th class="num">Stocks</th><th class="num">401(k)</th><th class="num">Cash &amp; CDs</th><th class="num">Total</th><th class="num">From savings / yr</th><th class="num">Guaranteed / yr</th></tr></thead><tbody>' +
       rows.map(function (r) { return '<tr><td>' + r.age + '</td><td>' + r.year + '</td><td class="num">' + money0(r.stocks) + '</td><td class="num">' + money0(r.k401) + '</td><td class="num">' + money0(r.cash) + '</td><td class="num">' + money0(r.total) + '</td><td class="num">' + (r.phase === 'work' ? '—' : money0(r.fromSavings)) + '</td><td class="num">' + (r.income ? money0(r.income) : '—') + '</td></tr>'; }).join('') +
       '</tbody></table></div></details>';
-    return '<div class="card ins-card">' + stats + legend(layers) + chart +
+    var seg = '<div class="seg seg-view ins-seg" role="group" aria-label="Chart view"><button type="button" data-act="last-view" data-val="range" aria-pressed="' + (view === 'range') + '">Range of outcomes</button><button type="button" data-act="last-view" data-val="accounts" aria-pressed="' + (view === 'accounts') + '">By account</button></div>';
+    var planBy = {}; rows.forEach(function (r) { planBy[r.age] = r.total; });
+    var fanRows = mc.rows.map(function (r) { return Object.assign({}, r, { plan: planBy[r.age] != null ? planBy[r.age] : 0, year: new Date().getFullYear() + (r.age - p.age0) }); });
+    var fan = fanChart('fanChart', fanRows, {
+      markers: markers.filter(function (m) { return !/^Runs out/.test(m.label); }), aria: 'Range of savings by age across ' + mc.paths + ' simulated markets, in today’s dollars',
+      tip: function (i) {
+        var r = fanRows[i];
+        return [['Age ' + r.age + ' · ' + r.year], ['Best 10% of futures', 'over ' + money0(r.p90), 'var(--c-eq)'], ['Typical future', money0(r.p50), 'var(--c-eq)'], ['Worst 10% of futures', 'under ' + money0(r.p10), 'var(--c-eq)'],
+          ['Steady returns', money0(r.plan), 'var(--muted)'], ['Still covering spending', mcPct(r.alive)]];
+      }
+    });
+    var fanLegend = '<div class="viz-legend"><span><i class="lk-area" style="--c:var(--c-eq);opacity:.35"></i>Middle 80% of futures</span><span><i class="lk-area" style="--c:var(--c-eq);opacity:.7"></i>Middle 50%</span><span><i class="lk-line" style="--c:var(--c-eq)"></i>Typical future</span><span><i class="lk-line lk-dash" style="--c:var(--muted)"></i>Steady returns</span></div>';
+    var body = view === 'range'
+      ? fanLegend + fan + '<p class="note">Each simulated market gives every year a random return: on average your Projections growth rates, but with ups and downs of about ' + pct(n(state.settings.mcVolStocks), 0) + ' a year for stocks and ' + pct(n(state.settings.mcVol401), 0) + ' for the 401(k) (change them in <a href="#/settings">Settings</a>). The typical future follows your steady plan; the bands show good and bad luck around it. A stress test, not a forecast.</p>'
+      : legend(layers) + chart;
+    return '<div class="card ins-card">' + stats + seg + body +
       '<p class="note">Today’s dollars. Spending comes from cash and CDs first, then stocks (paying capital-gains tax on the gain), then the 401(k) (paying income tax). Returns follow your Projections settings and scenario; home equity isn’t used. The retirement goal uses the ' + pct(g.rate * 100) + ' rule instead, so the two can differ.</p>' + table + '</div>';
   }
 
   /* 3. Everything you own (treemap) */
   function tmItems() {
     var t = [];
-    state.assets.forEach(function (r) { t.push({ cat: 'assets', name: r.name, v: n(r.value) }); });
-    state.stocks.forEach(function (r) { if (priced(r)) { var v = n(r.qty) * n(r.price), c = n(r.qty) * n(r.cost); t.push({ cat: 'stocks', name: r.ticker, sub: r.company, v: v, gain: c ? (v - c) / c * 100 : null, gainV: v - c }); } });
-    state.k401.forEach(function (r) { t.push({ cat: 'k401', name: r.name, v: n(r.balance) }); });
-    state.cds.forEach(function (r) { t.push({ cat: 'cds', name: r.name, v: cdValueNow(r) }); });
-    state.cash.forEach(function (r) { t.push({ cat: 'cash', name: r.name, v: n(r.balance) }); });
+    state.assets.forEach(function (r) { t.push({ id: r.id, cat: 'assets', name: r.name, v: n(r.value) }); });
+    state.stocks.forEach(function (r) { if (priced(r)) { var v = n(r.qty) * n(r.price), c = n(r.qty) * n(r.cost); t.push({ id: r.id, cat: 'stocks', name: r.ticker, sub: r.company, v: v, gain: c ? (v - c) / c * 100 : null, gainV: v - c }); } });
+    state.k401.forEach(function (r) { t.push({ id: r.id, cat: 'k401', name: r.name, v: n(r.balance) }); });
+    state.cds.forEach(function (r) { t.push({ id: r.id, cat: 'cds', name: r.name, v: cdValueNow(r) }); });
+    state.cash.forEach(function (r) { t.push({ id: r.id, cat: 'cash', name: r.name, v: n(r.balance) }); });
     return t.filter(function (x) { return x.v > 0.5; });
   }
   // Squarified treemap layout (Bruls et al.): rows of tiles kept as close to square as possible.
@@ -2498,8 +2698,11 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   }
   function insightsTreemap() {
     var mode = ui.tmMode || 'cat', zoom = ui.tmZoom || 'all', narrow = innerWidth < 680;
-    var items = tmItems(), t = totals(state);
+    var items = tmItems(), t = totals(state), finds = concFindings(state);
     if (!items.length) return '<div class="card ins-card empty">Add accounts to see them here.</div>';
+    // A selected concentration finding highlights its blocks and dims the rest; zoom out so they're all in view.
+    var focus = finds.filter(function (f) { return f.key === ui.concFocus; })[0], focusIds = focus ? focus.ids : null;
+    if (focus) zoom = 'all';
     var cats = CAT.map(function (c) { var its = items.filter(function (i) { return i.cat === c.key; }).sort(function (a, b) { return b.v - a.v; }); return Object.assign({}, c, { items: its, total: its.reduce(function (a, i) { return a + i.v; }, 0) }); }).filter(function (c) { return c.total > 0; });
     if (zoom !== 'all' && !cats.some(function (c) { return c.key === zoom; })) zoom = 'all';
     var shown = zoom === 'all' ? cats : cats.filter(function (c) { return c.key === zoom; });
@@ -2525,7 +2728,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
         var line2 = val + (mode === 'gain' && it.gain != null ? ' · ' + sgnPct(it.gain) : '');
         if (rw > Math.max(name.length, line2.length) * lfs * 0.6 + 12 && rh > lfs * 2.8) label = '<text x="' + (tl.x + 7).toFixed(1) + '" y="' + (tl.y + lfs + 6).toFixed(1) + '" style="font-size:' + lfs.toFixed(1) + 'px;font-weight:600;fill:' + col.ink + '">' + esc(name) + '</text><text x="' + (tl.x + 7).toFixed(1) + '" y="' + (tl.y + lfs * 2.25 + 6).toFixed(1) + '" style="font-size:' + (lfs * 0.92).toFixed(1) + 'px;fill:' + col.ink + '">' + val + (mode === 'gain' && it.gain != null ? ' · ' + sgnPct(it.gain) : '') + '</text>';
         else if (rw > val.length * lfs * 0.6 + 10 && rh > lfs * 1.6) label = '<text x="' + (tl.x + 6).toFixed(1) + '" y="' + (tl.y + lfs + 4).toFixed(1) + '" style="font-size:' + lfs.toFixed(1) + 'px;fill:' + col.ink + '">' + val + '</text>';
-        out += '<g class="tm-tile" tabindex="0" role="img" aria-label="' + esc(it.name + ', ' + c.label + ', ' + money0(it.v)) + '"' + tipAttr(tip) + '><rect x="' + (tl.x + 1).toFixed(1) + '" y="' + (tl.y + 1).toFixed(1) + '" width="' + rw.toFixed(1) + '" height="' + rh.toFixed(1) + '" rx="4" style="fill:' + col.fill + '"/>' + label + '</g>';
+        out += '<g class="tm-tile' + (focusIds ? (focusIds.indexOf(it.id) >= 0 ? ' tm-hi' : ' tm-dim') : '') + '" tabindex="0" role="img" aria-label="' + esc(it.name + ', ' + c.label + ', ' + money0(it.v)) + '"' + tipAttr(tip) + '><rect x="' + (tl.x + 1).toFixed(1) + '" y="' + (tl.y + 1).toFixed(1) + '" width="' + rw.toFixed(1) + '" height="' + rh.toFixed(1) + '" rx="4" style="fill:' + col.fill + '"/>' + label + '</g>';
       });
     });
     var chips = '<div class="chips" role="group" aria-label="Show"><button type="button" data-act="tm-zoom" data-val="all" aria-pressed="' + (zoom === 'all') + '">Everything</button>' +
@@ -2537,9 +2740,39 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     var table = '<details class="tbl"><summary>Show as a table</summary><div class="tablewrap"><table><thead><tr><th>Name</th><th>Type</th><th class="num">Value</th><th class="num">Share</th><th class="num">Gain</th></tr></thead><tbody>' +
       items.slice().sort(function (a, b) { return b.v - a.v; }).map(function (it) { var c = CAT.filter(function (x) { return x.key === it.cat; })[0]; return '<tr><td>' + esc(it.name) + '</td><td>' + esc(c.label) + '</td><td class="num">' + money0(it.v) + '</td><td class="num">' + pct(it.v / all * 100) + '</td><td class="num">' + (it.gain != null ? sgnPct(it.gain) : '—') + '</td></tr>'; }).join('') +
       '</tbody></table></div></details>';
-    return '<div class="card ins-card"><div class="ins-toolbar">' + chips + modeSeg + '</div>' + key +
+    return '<div class="card ins-card">' + concList(finds, focus) + '<div class="ins-toolbar">' + chips + modeSeg + '</div>' + key +
       '<svg class="tm" viewBox="0 0 ' + W + ' ' + H + '" role="group" aria-label="Everything you own, sized by value" style="width:100%;height:auto;display:block">' + out + '</svg>' +
       '<p class="note">' + (t.mortgage > 0.5 ? 'Not shown: loans, ' + money0(-t.mortgage) + '. Net worth is ' + money0(t.net) + '. ' : '') + 'Hover or tap a block for details; use the buttons above to zoom into one type.</p>' + table + '</div>';
+  }
+
+  /* Concentration findings in words. */
+  function concText(f) {
+    var p0 = function (v) { return pct(v * 100, 0); };
+    if (f.kind === 'stock') return { t: f.ticker + ' is ' + p0(f.share) + ' of your investments', d: money0(f.value) + (f.company ? ' in ' + f.company : '') + ' out of ' + money0(f.base) + ' in stocks, funds and 401(k). Many planners keep any one company under 10–15%; your limit is ' + p0(f.limit) + '.' };
+    if (f.kind === 'industry') return { t: p0(f.share) + ' of your individual stocks are ' + f.industry, d: f.count + ' of your ' + f.of + ' individual stocks, ' + money0(f.value) + ' of ' + money0(f.base) + '. A downturn in one industry would hit them together. Funds aren’t counted. Your limit is ' + p0(f.limit) + '.' };
+    if (f.kind === 'bank') {
+      var what = [f.cds ? f.cds + (f.cds === 1 ? ' CD' : ' CDs') : '', f.accts ? f.accts + (f.accts === 1 ? ' account' : ' accounts') : ''].filter(Boolean).join(' and ');
+      return { t: f.bank + ': about ' + money0(f.over) + ' over the insurance limit', d: money0(f.value) + ' across ' + what + '. FDIC (banks) and NCUA (credit unions) insure ' + money0(f.limit) + ' per person, per institution, per ownership type; joint accounts are covered up to twice that. Spreading money across banks keeps it all insured.' };
+    }
+    if (f.kind === 'property') return { t: 'Property is ' + p0(f.share) + ' of your net worth', d: money0(f.value) + ' after loans, of ' + money0(f.net) + '. Not a problem in itself, but it isn’t money you can spend in retirement without selling or borrowing against it.' };
+    return { t: 'Cash and CDs are ' + (Math.round(f.times * 10) / 10) + '× your ' + f.months + '-month reserve', d: money0(f.value) + ' in savings and CDs, ' + money0(f.extra) + ' above the ' + money0(f.reserve) + ' reserve (' + p0(f.share) + ' of your investable money). Money you won’t need for several years may grow more invested, or could pay down loans.' };
+  }
+  function concList(finds, focus) {
+    var warn = finds.filter(function (f) { return f.level === 'warn'; }).length;
+    var head = '<div class="conc-head"><b>Concentration check</b><span>' + (warn ? warn + (warn === 1 ? ' thing' : ' things') + ' to look at' : 'Nothing flagged') + ' · <a href="#/settings" data-act="goto-conc">limits</a></span></div>';
+    var hint = finds.unnamedBanks ? '<p class="conc-hint">Tip: add the bank name to your CDs and savings accounts (' + finds.unnamedBanks + ' without one) so the insurance check groups them correctly.</p>' : '';
+    if (!finds.length) return '<div class="conc">' + head + '<p class="conc-ok">No single company, industry or bank is above your limits, and cash is close to your reserve.</p>' + hint + '</div>';
+    return '<div class="conc">' + head + finds.map(function (f) {
+      var x = concText(f), on = focus && focus.key === f.key;
+      return '<button type="button" class="conc-item ' + f.level + (on ? ' on' : '') + '" data-act="conc-focus" data-key="' + esc(f.key) + '" aria-pressed="' + !!on + '"><span class="conc-ic" aria-hidden="true">' + (f.level === 'warn' ? '!' : 'i') + '</span><span><b>' + esc(x.t) + '</b>' + (on ? '<span>' + esc(x.d) + '</span>' : '') + '</span>' + CHEV + '</button>';
+    }).join('') + (focus ? '<p class="conc-hint">Highlighted below. Tap it again to close.</p>' : '<p class="conc-hint">Tap one for details and to highlight it below.</p>') + hint + '</div>';
+  }
+  // Overview: shown only when something is worth a look.
+  function concCard() {
+    var w = concFindings(state).filter(function (f) { return f.level === 'warn'; });
+    if (!w.length) return '';
+    return '<article class="card insight conc-card"><div class="eyebrow">Concentration check</div><h3>' + w.length + (w.length === 1 ? ' thing' : ' things') + ' to look at</h3><ul>' +
+      w.slice(0, 3).map(function (f) { return '<li>' + esc(concText(f).t) + '</li>'; }).join('') + (w.length > 3 ? '<li>and ' + (w.length - 3) + ' more</li>' : '') + '</ul><a class="btn" href="#/insights" data-act="goto-conc-ins">Review</a></article>';
   }
 
   /* 4. Life timeline */
@@ -2597,19 +2830,36 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
 
   /* 5. What changed (waterfall of the change in net worth) */
   function insightsChanged() {
-    var r = ui.wfRange || '3m', start = rangeStart(r), td = today();
+    var r = ui.wfRange || '3m', start = rangeStart(r), td = today(), view = ui.wfView === 'account' ? 'account' : 'cause';
     var hist = state.history.filter(function (e) { return e.stocks != null; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
-    var base = hist.filter(function (e) { return e.date >= start && e.date < td; })[0];
+    var inRange = hist.filter(function (e) { return e.date >= start && e.date < td; });
+    var base = inRange[0];
+    // By cause needs a snapshot that has the stock cost basis; use the earliest such one in the period.
+    var cbase = inRange.filter(function (e) { return e.stockCost != null; })[0];
+    var viewSeg = '<div class="seg seg-range" role="group" aria-label="Group by"><button type="button" data-act="wf-view" data-val="cause" aria-pressed="' + (view === 'cause') + '">By cause</button><button type="button" data-act="wf-view" data-val="account" aria-pressed="' + (view === 'account') + '">By account</button></div>';
+    var causeNote = '';
+    if (view === 'cause') {
+      if (cbase) base = cbase;
+      else if (base) { view = 'account'; causeNote = '<p class="conc-hint wf-hint">By cause needs snapshots saved since this update, which include your stock cost basis. It fills in from tomorrow; until then this shows the change by account.</p>'; }
+    }
     var seg = '<div class="seg seg-range" role="group" aria-label="Period">' + RANGES.map(function (x) { return '<button type="button" data-act="wf-range" data-val="' + x[0] + '" aria-pressed="' + (r === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>';
     if (!base) {
       var msg = !hist.length || (hist.length === 1 && hist[0].date === td)
         ? 'This fills in as daily snapshots build up. Check back after a few days of using the app.'
         : 'No snapshot before today in this period. Try a longer one.';
-      return '<div class="card ins-card"><div class="ins-toolbar"><span></span>' + seg + '</div><div class="empty">' + msg + '</div></div>';
+      return '<div class="card ins-card"><div class="ins-toolbar">' + viewSeg + seg + '</div><div class="empty">' + msg + '</div></div>';
     }
     var t = totals(state);
     var nw = innerWidth < 680;
-    var parts = [['Stocks', t.stocks - base.stocks], ['401(k)', t.k401 - base.k401], ['CDs', t.cds - base.cds], ['Savings', t.cash - base.cash], [nw ? 'Assets' : 'Property', t.assets - base.assets], ['Loans', base.mortgage - t.mortgage]];
+    var days = (parseDate(td) - parseDate(base.date)) / 864e5, cc = view === 'cause' ? changeCauses(state, base, days) : null;
+    var tipRow = function (l, v) { return [l, signed(v), v >= 0 ? 'var(--div-pos)' : 'var(--div-neg)']; };
+    var parts = cc ? [
+      ['You added', cc.added, [['Money you added, net of withdrawals'], tipRow('Stocks & funds (bought less sold)', cc.addS), tipRow('401(k)' + (cc.k4stale ? ' · balance not updated' : ' · from your yearly contributions'), cc.addK), tipRow('Savings & CDs (deposits less withdrawals)', cc.addC)]],
+      ['Market', cc.market, [['Market moves'], tipRow('Stocks & funds', cc.mktS), tipRow('401(k)' + (cc.k4stale ? ' · balance not updated' : ''), cc.mktK)]],
+      ['Interest', cc.interest, [['Interest earned (estimated)'], tipRow('Savings & CDs', cc.interest), ['From balances and APY' + (cc.cashStale ? '; savings unchanged, so CDs only' : '')]]],
+      [nw ? 'Loans' : 'Loans paid', cc.loans, [[cc.loans >= 0 ? 'Loans paid down' : 'Loans grew'], tipRow('Change', cc.loans)]],
+      ['Property', cc.property, [['Property & assets value'], tipRow('Change', cc.property)]]
+    ] : [['Stocks', t.stocks - base.stocks], ['401(k)', t.k401 - base.k401], ['CDs', t.cds - base.cds], ['Savings', t.cash - base.cash], [nw ? 'Assets' : 'Property', t.assets - base.assets], ['Loans', base.mortgage - t.mortgage]];
     var total = t.net - base.net;
     var nar = innerWidth < 680, W = nar ? 420 : 1000, H = 300, L = nar ? 44 : 64, R = nar ? 6 : 20, T = 30, B = 40, n2 = parts.length + 1, slot = (W - L - R) / n2, bw = nar ? 18 : 24;
     var cum = 0, lo = 0, hi = 0;
@@ -2632,7 +2882,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     cum = 0;
     parts.forEach(function (p, i) {
       var from = cum, to = cum + p[1];
-      out += bar(i, from, to, p[1] >= 0 ? 'wf-up' : 'wf-down', p[0], [[p[0] === 'Loans' ? (p[1] >= 0 ? 'Loans paid down' : 'Loans grew') : p[0] === 'Assets' ? 'Property & assets' : p[0]], ['Change', signed(p[1]), p[1] >= 0 ? 'var(--div-pos)' : 'var(--div-neg)'], ['Running total', signed(to)]]);
+      out += bar(i, from, to, p[1] >= 0 ? 'wf-up' : 'wf-down', p[0], p[2] ? p[2].concat([['Running total', signed(to)]]) : [[p[0] === 'Loans' ? (p[1] >= 0 ? 'Loans paid down' : 'Loans grew') : p[0] === 'Assets' ? 'Property & assets' : p[0]], ['Change', signed(p[1]), p[1] >= 0 ? 'var(--div-pos)' : 'var(--div-neg)'], ['Running total', signed(to)]]);
       if (i < parts.length) {
         var nx = L + slot * (i + 1) + slot / 2 - bw / 2;
         out += '<line class="wf-link" x1="' + (L + slot * i + slot / 2 + bw / 2).toFixed(1) + '" x2="' + nx.toFixed(1) + '" y1="' + Y(to).toFixed(1) + '" y2="' + Y(to).toFixed(1) + '"/>';
@@ -2641,16 +2891,19 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     });
     out += bar(parts.length, 0, total, 'wf-total', nar ? 'Net' : 'Net change', [['Net change'], ['From ' + fmtDate(base.date), money0(base.net)], ['Today', money0(t.net)], ['Change', signed(total)]]);
     var head = '<div class="wf-head"><b class="' + (total < 0 ? 'neg' : 'pos') + '">' + signed(total) + (base.net ? ' (' + sgnPct(total / Math.abs(base.net) * 100) + ')' : '') + '</b><span>since ' + fmtDate(base.date) + ' · ' + money0(base.net) + ' → ' + money0(t.net) + '</span></div>';
-    return '<div class="card ins-card"><div class="ins-toolbar">' + head + seg + '</div>' +
+    var summary = cc ? '<p class="wf-sum">' + (Math.abs(total) < 0.5 ? 'No change' : 'Of the ' + signed(total) + ', <b>' + signed(cc.added) + '</b> was money you added and <b class="' + (cc.market < 0 ? 'neg' : 'pos') + '">' + signed(cc.market) + '</b> came from the market' + (Math.abs(cc.interest) >= 0.5 ? ', plus ' + signed(cc.interest) + ' interest' : '') + '.') + '</p>' : '';
+    var note = cc ? 'Money you added counts stock purchases less sales (from cost basis), 401(k) contributions from your yearly setting' + (cc.k4stale ? ' (your 401(k) balance wasn’t updated in this period, so it shows no change)' : '') + ', and savings and CD deposits less withdrawals; moves between your own accounts cancel out. Interest is estimated from balances and APY. Market is the rest of the change in stocks and the 401(k). Compared with your snapshot from ' + fmtDate(base.date) + '.'
+      : 'Changes include both money you added and market moves. Loans shows the amount paid down. Compared with your snapshot from ' + fmtDate(base.date) + '.';
+    return '<div class="card ins-card"><div class="ins-toolbar">' + head + '<div class="wf-ctl">' + viewSeg + seg + '</div></div>' + summary + causeNote +
       '<div class="viz-legend"><span><i class="lk-area" style="--c:var(--div-pos)"></i>Increase</span><span><i class="lk-area" style="--c:var(--div-neg)"></i>Decrease</span><span><i class="lk-area" style="--c:var(--muted)"></i>Net change</span></div>' +
-      '<svg viewBox="0 0 ' + W + ' ' + H + '" role="group" aria-label="What changed in net worth, by account type" style="width:100%;height:auto;display:block">' + out + '</svg>' +
-      '<p class="note">Changes include both money you added and market moves. Loans shows the amount paid down. Compared with your snapshot from ' + fmtDate(base.date) + '.</p></div>';
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" role="group" aria-label="What changed in net worth, ' + (cc ? 'by cause' : 'by account type') + '" style="width:100%;height:auto;display:block">' + out + '</svg>' +
+      '<p class="note">' + note + '</p></div>';
   }
 
   function renderInsights() {
     return '<header class="head"><div><div class="eyebrow">Insights · today’s dollars</div><h1>See where your money is going.</h1></div></header>' +
       '<section class="ins"><div class="section-head"><h2>Retirement what-if</h2><p>Drag the sliders to test changes. The chart and the “What helps most” bars update as you go.</p></div>' + insightsWhatIf() + '</section>' +
-      '<section class="ins"><div class="section-head"><h2>Will the money last?</h2><p>Your current plan from today to age ' + planEnd(state.settings) + ', by account type. Hover for each year.</p></div>' + insightsLast() + '</section>' +
+      '<section class="ins"><div class="section-head"><h2>Will the money last?</h2><p>Your current plan from today to age ' + planEnd(state.settings) + ', with market ups and downs or by account type. Hover for each year.</p></div>' + insightsLast() + '</section>' +
       '<section class="ins"><div class="section-head"><h2>Everything you own</h2><p>Each block is sized by value. Big blocks are where your money is concentrated.</p></div>' + insightsTreemap() + '</section>' +
       '<section class="ins"><div class="section-head"><h2>Life timeline</h2><p>Milestones from today to age ' + planEnd(state.settings) + '.</p></div>' + insightsTimeline() + '</section>' +
       '<section class="ins"><div class="section-head"><h2>What changed</h2><p>Where the change in your net worth came from.</p></div>' + insightsChanged() + '</section>';
@@ -2671,7 +2924,12 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     },
     'tm-mode': function (el) { ui.tmMode = el.dataset.val; render(); },
     'tm-zoom': function (el) { ui.tmZoom = el.dataset.val; render(); },
-    'wf-range': function (el) { ui.wfRange = el.dataset.val; render(); }
+    'wf-range': function (el) { ui.wfRange = el.dataset.val; render(); },
+    'last-view': function (el) { ui.lastView = el.dataset.val; render(); },
+    'wf-view': function (el) { ui.wfView = el.dataset.val; render(); },
+    'conc-focus': function (el) { ui.concFocus = ui.concFocus === el.dataset.key ? null : el.dataset.key; render(); if (ui.concFocus) { var svg = $('svg.tm'); if (svg && svg.getBoundingClientRect().top > innerHeight - 120) svg.scrollIntoView({ block: 'center', behavior: 'smooth' }); } },
+    'goto-conc': function () { setTimeout(function () { var c = $('#setConc'); if (c) c.scrollIntoView({ block: 'start' }); }, 60); },
+    'goto-conc-ins': function () { setTimeout(function () { var c = $('.conc'); if (c) c.scrollIntoView({ block: 'start' }); }, 60); }
   };
   document.addEventListener('input', function (e) {
     var k = e.target.dataset && e.target.dataset.wi; if (!k || !ui.whatIf) return;
@@ -2787,6 +3045,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       numField('goalRetireAge', 'Retirement age', '1', '') +
       numField('goalMonthly', 'Monthly income you want in retirement, in today’s dollars ($)', '100', 'What you want to spend each month; the goal uses 12 times this a year. Taxes on 401(k) withdrawals and stock gains are already taken out of your savings before this comparison.') +
       numField('goalRate', 'Withdrawal rate (%)', '0.1', 'The share of your savings you take out each year. 4% is a common rule of thumb for about 30 years of retirement; a lower rate is safer.') +
+      numField('mcVolStocks', 'How much stocks swing in a year (%)', '1', 'Used for the chance-of-success estimate in Insights. The typical size of a year’s ups and downs: about 15–18% for a stock index fund. 0 turns the swings off.') +
+      numField('mcVol401', 'How much the 401(k) swings in a year (%)', '1', 'About 12% for a mostly-stock 401(k), 8–10% for a balanced or target-date fund, lower with more bonds.') +
       numField('planAge', 'Plan until age', '1', 'How far the lifetime plan in Insights runs, from 85 to 105. 95 is a common choice; 100 adds a safety margin.') +
       incomeFields() +
       '</section>' +
@@ -2799,6 +3059,12 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<section class="card set-card" aria-labelledby="setPlan"><h2 id="setPlan">Cash reserve</h2><p>Used on the Overview to show how much cash sits above, or below, your emergency reserve.</p>' +
       '<div class="field"><label for="s_monthlyExpenses">Monthly spending ($)</label><input id="s_monthlyExpenses" type="number" min="0" step="100" inputmode="decimal" value="' + esc(n(st.monthlyExpenses)) + '" data-set="monthlyExpenses" data-fk="s_monthlyExpenses"></div>' +
       '<div class="field"><label for="s_reserveMonths">Months to keep in reserve</label><input id="s_reserveMonths" type="number" min="0" step="1" inputmode="numeric" value="' + esc(n(st.reserveMonths)) + '" data-set="reserveMonths" data-fk="s_reserveMonths"></div></section>' +
+      '<section class="card set-card" aria-labelledby="setConc"><h2 id="setConc">Concentration check</h2><p>Limits for the warnings in Insights › Everything you own (and on the Overview when something is flagged). 0 turns a check off.</p>' +
+      numField('concStock', 'One company, % of investments', '1', 'Stocks and private holdings, as a share of stocks, funds and 401(k). Funds aren’t flagged. 10–15% is a common guideline.') +
+      numField('concIndustry', 'One industry, % of individual stocks', '5', 'Checked once you have 3 or more individual stocks with a known industry (from Finnhub).') +
+      numField('concInsure', 'Insurance limit per bank ($)', '1000', 'FDIC and NCUA insure $250,000 per person, per bank. Use $500,000 if your accounts there are joint.') +
+      numField('concCash', 'Cash above your reserve, % of investable money', '5', 'Flags savings and CDs beyond your cash reserve when they’re more than this share of stocks, 401(k), CDs and savings.') +
+      '</section>' +
       lockCard() +
       '<section class="card set-card" aria-labelledby="setLook"><h2 id="setLook">Appearance</h2><p>Follow your system setting, or pick one.</p><div class="seg seg-theme" role="group" aria-labelledby="setLook">' + themeBtns + '</div></section>' +
       '</div>';
@@ -2888,7 +3154,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     var rec = Object.assign(dlgCtx.cat === 'stocks' ? { prevClose: null, quoteTime: null, quoteSource: '', quoteError: null } : {}, old || {}, vals);
     if (dlgCtx.cat === 'stocks' && (!old || old.price !== vals.price)) { rec.prevClose = null; rec.quoteError = null; rec.quoteTime = vals.price === null ? null : Date.now(); rec.quoteSource = vals.price === null ? '' : 'Entered'; }
     // A new or changed ticker looks up its logo again.
-    if (dlgCtx.cat === 'stocks' && (!old || old.ticker !== rec.ticker || old.symbol !== rec.symbol)) { rec.logo = ''; rec.logoChecked = null; setTimeout(fetchLogos, 800); }
+    if (dlgCtx.cat === 'stocks' && (!old || old.ticker !== rec.ticker || old.symbol !== rec.symbol)) { rec.logo = ''; rec.logoChecked = null; delete rec.industry; setTimeout(fetchLogos, 800); }
     if (old) { rec.id = old.id; list[list.indexOf(old)] = rec; } else { rec.id = uid(); list.push(rec); }
     var wasEdit = !!old, replaced = dlgCtx.replace;
     if (replaced) state[dlgCtx.cat] = state[dlgCtx.cat].filter(function (r) { return r.id !== replaced; });

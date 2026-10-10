@@ -416,6 +416,41 @@ table.mini td{padding:7px 10px;font-size:12px}
 .viz-legend span{display:inline-flex;align-items:center;gap:6px}
 .lk-area{width:12px;height:12px;border-radius:3px;background:var(--c);display:inline-block}
 .lk-line{width:16px;height:2px;border-radius:1px;background:var(--c);display:inline-block}
+.lk-dash{background:repeating-linear-gradient(90deg,var(--c) 0 4px,transparent 4px 7px)}
+.fan-outer{fill:var(--c-eq);opacity:.16}
+.fan-inner{fill:var(--c-eq);opacity:.3}
+.fan-mid{fill:none;stroke:var(--c-eq);stroke-width:2.5;stroke-linejoin:round}
+.fan-plan{fill:none;stroke:var(--muted);stroke-width:1.6;stroke-dasharray:5 4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .fan-outer{opacity:.32}:root:not([data-theme="light"]) .fan-inner{opacity:.55}}
+:root[data-theme="dark"] .fan-outer{opacity:.32} :root[data-theme="dark"] .fan-inner{opacity:.55}
+.ins-seg{display:inline-grid;margin:0 0 12px}
+.mc-mid{color:color-mix(in srgb,var(--c-cc) 70%,var(--ink))}
+.conc{display:grid;gap:8px;margin-bottom:16px}
+.conc-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:14px}
+.conc-head span{font-size:12px;color:var(--muted)}
+.conc-ok,.conc-hint{margin:0;font-size:12.5px;color:var(--muted)}
+.conc-item{display:flex;gap:12px;align-items:flex-start;width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:inherit;font:inherit;text-align:left;cursor:pointer}
+.conc-item:hover{border-color:color-mix(in srgb,var(--ink) 30%,var(--line))}
+.conc-item.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.conc-item>span:nth-child(2){flex:1;display:grid;gap:3px;min-width:0}
+.conc-item .ac-chev{flex:none;width:16px;height:16px;margin-top:3px;color:var(--muted);transition:transform .2s}
+.conc-item.on .ac-chev{transform:rotate(90deg);color:var(--ink)}
+.conc-item b{font-size:13.5px}
+.conc-item>span:nth-child(2)>span{font-size:12px;color:var(--muted);line-height:1.45}
+.conc-ic{flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;font-size:12px;font-weight:800;margin-top:1px}
+.conc-item.warn .conc-ic{background:color-mix(in srgb,var(--c-cc) 25%,var(--surface));color:color-mix(in srgb,var(--c-cc) 60%,var(--ink))}
+.conc-item.info .conc-ic{background:var(--surface-soft);color:var(--muted);font-family:Georgia,serif;font-style:italic}
+.tm-tile.tm-dim{opacity:.22}
+.tm-tile.tm-hi rect{stroke:var(--ink);stroke-width:2.5}
+.conc-card h3{margin:6px 0 8px}
+.conc-card ul{margin:0 0 14px;padding-left:18px;color:var(--muted);font-size:13px;display:grid;gap:4px}
+.wf-ctl{display:flex;gap:8px;flex-wrap:wrap}
+.wf-sum{margin:0 0 10px;font-size:13.5px;color:var(--muted)}
+.wf-sum b:not(.pos):not(.neg){color:var(--ink)}
+.wf-hint{margin:0 0 10px}
+.mc-line{display:block;margin:0 0 14px;font-size:13px;color:var(--muted);text-decoration:none}
+.mc-line b{font-size:15px;margin-right:2px}
+.mc-line:hover{color:var(--ink)}
 .gain-key{display:inline-block;width:140px;height:10px;border-radius:5px;background:linear-gradient(90deg,var(--div-neg),var(--div-mid),var(--div-pos))}
 .viz-tip{position:fixed;z-index:40;display:none;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px 12px;font-size:12px;min-width:170px;max-width:300px}
 .vt-head{font-weight:600;color:var(--muted);margin-bottom:6px}
@@ -679,6 +714,6 @@ dialog h2{font-size:20px}
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="lock" hidden></div>
 
-<script src="app.js?v=2026100904"></script>
+<script src="app.js?v=2026100907"></script>
 </body>
 </html>
