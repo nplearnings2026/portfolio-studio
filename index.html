@@ -82,6 +82,20 @@ main{min-width:0;padding:28px clamp(16px,4vw,64px) 64px}
 .flag b{color:var(--ink)}
 .flag.real{--c:var(--pos)} .flag.sample{--c:var(--c-cc);text-decoration:none}
 a.flag.sample:hover b{text-decoration:underline}
+html.locked .app,html.locked .mnav{visibility:hidden}
+html.veiled .app,html.veiled .mnav,html.veiled dialog{filter:blur(18px)}
+#lock{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:24px;background:var(--bg)}
+#lock[hidden]{display:none}
+.lock-card{display:grid;justify-items:center;gap:10px;max-width:340px;text-align:center}
+.lock-card h2{margin:6px 0 0;font-size:20px}
+.lock-card p{margin:0;color:var(--muted);font-size:13.5px}
+.lock-card .lock-msg{color:var(--neg)}
+.lock-mark{width:52px;height:52px;border-radius:14px;background:var(--ink);color:var(--surface);display:grid;place-items:center}
+.lock-btn{margin-top:10px;min-width:200px;justify-content:center}
+.lock-out{margin-top:18px;border:0;background:none;color:var(--muted);font:inherit;font-size:12px;text-decoration:underline;cursor:pointer}
+.chip.eye{display:inline-grid;place-items:center;padding:0;width:34px;height:31px;cursor:pointer;color:var(--ink)}
+.chip.eye svg{width:17px;height:17px}
+.chip.eye[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .chip{font-family:var(--mono);color:var(--muted);font-size:11px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
 .chip.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--pos);margin-right:7px;vertical-align:1px}
 .chip.busy::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:7px;vertical-align:1px;animation:pulse 1s infinite alternate}
@@ -660,6 +674,7 @@ dialog h2{font-size:20px}
 </dialog>
 <input type="file" id="importFile" accept="application/json,.json" hidden>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="lock" hidden></div>
 
 <script>
 /*ENGINE_START*/
@@ -1115,14 +1130,24 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   var $ = function (sel) { return document.querySelector(sel); };
   var usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   var usd2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  function money0(v) { return (v < 0 ? '−' : '') + usd0.format(Math.abs(v)); }
-  function money2(v) { return (v < 0 ? '−' : '') + usd2.format(Math.abs(v)); }
-  function signed(v, f) { return (v < 0 ? '−' : '+') + (f || usd0).format(Math.abs(v)); }
+  /* Hide amounts (per device, the eye button at the top of every page): every dollar amount of yours shows as
+     $•••••. Signs and colors stay, so ups and downs still read. Market prices per share, percentages and exports
+     are not masked; share quantities are, since quantity times price would give the amount away. */
+  var MASK = '•••••';
+  function hiding() { return !!(typeof prefs !== 'undefined' && prefs && prefs.hide); }
+  function money0(v) { return (v < 0 ? '−' : '') + (hiding() ? '$' + MASK : usd0.format(Math.abs(v))); }
+  function money2(v) { return (v < 0 ? '−' : '') + (hiding() ? '$' + MASK : usd2.format(Math.abs(v))); }
+  function signed(v, f) { return (v < 0 ? '−' : '+') + (hiding() ? '$' + MASK : (f || usd0).format(Math.abs(v))); }
+  // Market prices per share are public, so they always show.
+  function px(v) { return (v < 0 ? '−' : '') + usd2.format(Math.abs(v)); }
+  function pxSigned(v) { return (v < 0 ? '−' : '+') + usd2.format(Math.abs(v)); }
+  function qtyTxt(v) { return hiding() ? '•••' : n(v).toLocaleString('en-US', { maximumFractionDigits: 4 }); }
   function pct(v, d) { return (v < 0 ? '−' : '') + Math.abs(v).toFixed(d == null ? 1 : d) + '%'; }
   function sgnPct(v) { return (v < 0 ? '−' : '+') + Math.abs(v).toFixed(1) + '%'; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function short(v) {
     var a = Math.abs(v), s = v < 0 ? '−$' : '$';
+    if (hiding()) return s + '•••';
     if (a === 0) return '$0';
     if (a >= 1e6) return s + (+(a / 1e6).toFixed(2)) + 'M';
     return s + Math.round(a / 1e3) + 'K';
@@ -1149,6 +1174,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     projections: '<path d="m4 17 5-5 4 3 7-9"/><path d="M15 6h5v5"/>',
     insights: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7a10 10 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
     refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/>',
     k401: '<path d="M5 20V9l7-5 7 5v11M9 20v-5h6v5"/>',
     cds: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
@@ -1205,7 +1232,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.10.09', APP_BUILD = 2026100901;
+  var APP_VERSION = '2026.10.09', APP_BUILD = 2026100903;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -1356,6 +1383,90 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     else document.documentElement.removeAttribute('data-theme');
   }
   applyTheme();
+
+  /* App lock (per device): Face ID / Touch ID through a passkey made only for unlocking this app. Turned on and off in
+     Settings. While locked nothing of yours is drawn; sync and price refreshes carry on in the background. This is a
+     screen lock: the data on the device is not encrypted. The passkey is never sent anywhere, since there's no server. */
+  var lockState = { locked: false, hiddenAt: 0, busy: false };
+  function lockPrefs() { return prefs.lock && prefs.lock.on && prefs.lock.credId ? prefs.lock : null; }
+  function lockAvailable() {
+    if (!window.PublicKeyCredential || !navigator.credentials || !window.isSecureContext) return Promise.resolve(false);
+    return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(function () { return false; });
+  }
+  function rand(len) { var a = new Uint8Array(len); crypto.getRandomValues(a); return a; }
+  function fromB64url(str) { str = str.replace(/-/g, '+').replace(/_/g, '/'); while (str.length % 4) str += '='; var b = atob(str), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
+  function lockErr(e) {
+    if (e && e.name === 'NotAllowedError') return 'Face ID / Touch ID was cancelled or timed out. Try again.';
+    if (e && e.name === 'InvalidStateError') return 'This device already has a lock passkey for Portfolio Studio. Try again.';
+    return 'Face ID / Touch ID isn’t available here' + (e && e.message ? ' (' + e.message + ')' : '') + '.';
+  }
+  // Asks for Face ID / Touch ID with this device's lock passkey. Resolves when the person is verified.
+  function verifyLock() {
+    var l = lockPrefs(); if (!l) return Promise.resolve();
+    return navigator.credentials.get({ publicKey: {
+      challenge: rand(32), rpId: location.hostname, timeout: 60000, userVerification: 'required',
+      allowCredentials: [{ type: 'public-key', id: fromB64url(l.credId) }]
+    } });
+  }
+  function enableLock() {
+    lockAvailable().then(function (ok) {
+      if (!ok) { toast('Face ID / Touch ID isn’t available in this browser.'); return; }
+      return navigator.credentials.create({ publicKey: {
+        rp: { name: 'Portfolio Studio', id: location.hostname },
+        user: { id: rand(16), name: 'Portfolio Studio app lock', displayName: 'Portfolio Studio app lock' },
+        challenge: rand(32), timeout: 60000, attestation: 'none',
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' }
+      } }).then(function (cred) {
+        prefs.lock = { on: true, credId: b64url(new Uint8Array(cred.rawId)), after: prefs.lock && prefs.lock.after != null ? prefs.lock.after : 1, since: Date.now() };
+        savePrefs(); render(); toast('App lock is on for this device');
+      });
+    }).catch(function (e) { toast(lockErr(e)); });
+  }
+  // Turning the lock off asks for Face ID / Touch ID first, so someone holding the open app can't quietly remove it.
+  function disableLock() {
+    verifyLock().then(function () {
+      prefs.lock = { on: false, after: prefs.lock ? prefs.lock.after : 1 }; savePrefs(); render();
+      toast('App lock is off for this device. You can delete the “Portfolio Studio app lock” passkey in your passwords settings.');
+    }, function (e) { toast(lockErr(e)); });
+  }
+  function lockNow() {
+    if (!lockPrefs() || lockState.locked) return;
+    lockState.locked = true;
+    try { if (dlg.open) dlg.close(); } catch (e) { /* not open */ }
+    document.documentElement.classList.add('locked');
+    render();
+  }
+  function unlock() {
+    if (lockState.busy) return;
+    lockState.busy = true; showLock();
+    verifyLock().then(function () {
+      lockState.locked = false; lockState.busy = false;
+      document.documentElement.classList.remove('locked', 'veiled');
+      $('#lock').hidden = true; $('#lock').innerHTML = '';
+      render();
+    }, function (e) { lockState.busy = false; showLock(lockErr(e)); });
+  }
+  function showLock(msg) {
+    var el = $('#lock'); el.hidden = false;
+    el.innerHTML = '<div class="lock-card" role="dialog" aria-modal="true" aria-labelledby="lockTitle"><span class="mark lock-mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 18V9m7 9V5m7 13v-6M3 18h18"/></svg></span>' +
+      '<h2 id="lockTitle">Portfolio Studio is locked</h2><p>Unlock with Face ID, Touch ID or your device passcode.</p>' +
+      (msg ? '<p class="lock-msg">' + esc(msg) + '</p>' : '') +
+      '<button type="button" class="btn primary lock-btn" data-act="unlock"' + (lockState.busy ? ' disabled' : '') + '>' + (lockState.busy ? 'Waiting for Face ID…' : 'Unlock') + '</button>' +
+      '<button type="button" class="lock-out" data-act="lock-signout">Can’t unlock? Sign out and remove data from this device</button></div>';
+    var b = el.querySelector('.lock-btn'); if (b && !lockState.busy) b.focus();
+  }
+  // Auto-lock: the screen is veiled as soon as the app goes to the background (so the app switcher shows nothing),
+  // and the app locks if it stays away for the chosen time.
+  document.addEventListener('visibilitychange', function () {
+    var l = lockPrefs(); if (!l) return;
+    if (document.hidden) { lockState.hiddenAt = Date.now(); document.documentElement.classList.add('veiled'); if (!n(l.after)) lockNow(); }
+    else {
+      if (lockState.hiddenAt && Date.now() - lockState.hiddenAt >= n(l.after) * 60000) lockNow();
+      if (!lockState.locked) document.documentElement.classList.remove('veiled');
+    }
+  });
+  if (lockPrefs()) { lockState.locked = true; document.documentElement.classList.add('locked'); }
 
   /* ---------- OneDrive sync (Microsoft Graph, app folder only) ----------
      Sign-in uses the OAuth 2.0 authorization-code flow with PKCE for single-page apps, so there is no client secret.
@@ -1670,6 +1781,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   function signOutHere() {
     clearTimeout(saveTimer); clearTimeout(cloudTimer);
     prefs.cloud = false; prefs.cloudETag = null; prefs.cloudBase = null; prefs.cloudBackupDay = null; prefs.cloudFile = null; savePrefs(); storeAuth(null);
+    // Nothing of yours is left to protect, so the app lock goes too.
+    if (prefs.lock && prefs.lock.on) { prefs.lock = { on: false, after: prefs.lock.after }; savePrefs(); }
     try { [KEY, OLD_KEY, BACKUP_KEY].forEach(function (k) { localStorage.removeItem(k); }); sessionStorage.removeItem('ps-silent'); } catch (e) { /* private mode */ }
     cloud = { status: 'off', at: null, error: '', dirty: false, again: 0 };
     var feed = state.feed;
@@ -1791,6 +1904,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   }
   var lastView = null;
   function render() {
+    // Locked: nothing of yours is drawn until Face ID / Touch ID unlocks the app.
+    if (lockState.locked) { $('#main').innerHTML = ''; $('#sideFoot').innerHTML = ''; showLock(); return; }
     var view = currentView();
     var active = document.activeElement, fk = active && active.getAttribute && active.getAttribute('data-fk');
     var navHtml = function (cls) {
@@ -1851,7 +1966,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       ? '<a class="flag sample" href="#/settings" title="Made-up data. Switch back or sign in to OneDrive under Settings."><b>Sample data</b><span class="flag-x"> · made up · not financial advice</span></a>'
       : '<div class="flag real"><b>Your data</b><span class="flag-x"> · not financial advice</span></div>';
     return '<div class="topline">' + flag +
-      '<div class="actions"><span class="chip" data-save-status>' + esc(saveText()) + '</span><span class="chip ' + s.cls + '" data-feed-chip>' + esc(s.text) + '</span></div></div>';
+      '<div class="actions"><button type="button" class="chip eye" data-act="hide-amounts" aria-pressed="' + hiding() + '" title="' + (hiding() ? 'Show amounts' : 'Hide amounts') + '" aria-label="' + (hiding() ? 'Show amounts' : 'Hide amounts') + '">' + icon(hiding() ? 'eyeOff' : 'eye') + '</button><span class="chip" data-save-status>' + esc(saveText()) + '</span><span class="chip ' + s.cls + '" data-feed-chip>' + esc(s.text) + '</span></div></div>';
   }
   function renderBanners() {
     var out = '';
@@ -2078,7 +2193,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<span class="hc-main">' +
       '<span class="hc-row"><span class="hc-tk">' + esc(r.ticker) + tag + '</span><b class="hc-val">' + (p ? money2(mv) : 'No price') + '</b></span>' +
       '<span class="hc-row"><span class="hc-co">' + esc(r.company || r.type || '') + '</span>' + (d ? '<span class="' + cls(d.chg) + '">' + (d.chg < 0 ? '▼ ' : '▲ ') + sgnPct(d.pct) + ' today</span>' : '<span class="muted">—</span>') + '</span>' +
-      '<span class="hc-row hc-sub"><span>' + qty.toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' sh · ' + (p ? money2(n(r.price)) : 'cost ' + money2(n(r.cost))) + '</span>' +
+      '<span class="hc-row hc-sub"><span>' + qtyTxt(qty) + ' sh · ' + (p ? px(n(r.price)) : 'cost ' + money2(n(r.cost))) + '</span>' +
       (p ? '<span class="' + cls(g) + '">' + signed(g) + (cost ? ' · ' + sgnPct(g / cost * 100) : '') + '</span>' : '<span class="muted">—</span>') + '</span>' +
       '</span></button>';
   }
@@ -2127,7 +2242,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
         '<td class="lead" data-label="Ticker"><span class="tk-cell">' + logoHtml(r, 'sm') + '<span><span class="tk">' + esc(r.ticker) + '</span><br>' + status + '</span></span></td>' +
         '<td data-label="Company">' + esc(r.company) + '</td>' +
         '<td data-label="Type" class="muted">' + esc(r.type) + '</td>' +
-        '<td class="num" data-label="Qty">' + n(r.qty).toLocaleString('en-US', { maximumFractionDigits: 4 }) + '</td>' +
+        '<td class="num" data-label="Qty">' + qtyTxt(r.qty) + '</td>' +
         '<td class="num" data-label="Cost / share">' + money2(n(r.cost)) + '</td>' +
         '<td class="num" data-label="Price"><input class="price' + (ui.flash[r.id] ? ' flash' : '') + '" type="number" step="any" min="0" inputmode="decimal" placeholder="—" aria-label="Current price for ' + esc(r.ticker) + '" value="' + (p ? esc(n(r.price)) : '') + '" data-price="' + esc(r.id) + '" data-fk="price-' + esc(r.id) + '"></td>' +
         '<td class="num" data-label="Day">' + (d ? '<span class="' + (d.chg < 0 ? 'neg' : 'pos') + '">' + sgnPct(d.pct) + '</span>' : '<span class="muted">—</span>') + '</td>' +
@@ -2477,7 +2592,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     var items = [], seen = {};
     var item = function (sym, label, price, prev, href) {
       var d = prev > 0 ? (price - prev) / prev * 100 : null;
-      return '<a class="tp" href="' + href + '"' + (href === '#/stocks' ? ' data-act="movers-all"' : '') + '>' + (label ? '<span class="tp-lab">' + esc(label) + '</span>' : '') + '<b>' + esc(sym) + '</b><span class="tp-px">' + money2(price) + '</span>' +
+      return '<a class="tp" href="' + href + '"' + (href === '#/stocks' ? ' data-act="movers-all"' : '') + '>' + (label ? '<span class="tp-lab">' + esc(label) + '</span>' : '') + '<b>' + esc(sym) + '</b><span class="tp-px">' + px(price) + '</span>' +
         (d == null ? '' : '<span class="' + (d < 0 ? 'neg' : 'pos') + '">' + (d < 0 ? '▼ ' : '▲ ') + sgnPct(d) + '</span>') + '</a>';
     };
     var asOf = 0;
@@ -2520,8 +2635,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       var q = n(m.r.qty);
       return '<a class="mv" href="#/stocks" data-act="movers-all"><span class="eyebrow">' + (up ? 'Top gainer' : 'Top loser') + '</span>' +
         '<span class="mv-line"><b class="mv-tk">' + esc(m.r.ticker) + '</b><b class="' + (up ? 'pos' : 'neg') + '">' + (up ? '▲ ' : '▼ ') + sgnPct(m.d.pct) + '</b></span>' +
-        '<span class="sub">' + money2(n(m.r.price)) + ' (' + signed(m.d.chg, usd2) + ')</span>' +
-        '<span class="sub">' + signed(m.usd) + ' on ' + q.toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' share' + (q === 1 ? '' : 's') + '</span></a>';
+        '<span class="sub">' + px(n(m.r.price)) + ' (' + pxSigned(m.d.chg) + ')</span>' +
+        '<span class="sub">' + signed(m.usd) + ' on ' + qtyTxt(q) + ' share' + (q === 1 || hiding() ? '' : 's') + '</span></a>';
     };
     var prev = moves.reduce(function (a, m) { return a + n(m.r.qty) * m.r.prevClose; }, 0), tot = moves.reduce(function (a, m) { return a + m.usd; }, 0);
     var priceable = state.stocks.filter(function (r) { return !r.manual; }).length;
@@ -3303,6 +3418,17 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       (prefs.cloud && cloudAvailable() ? '<div class="field"><span class="lab">OneDrive backups</span><span class="hint">Each device saves the OneDrive copy once a day, before changing it, to OneDrive › Apps › Portfolio Studio › backups. The newest ' + CLOUD_KEEP + ' are kept.</span><div id="cloudBackups"><div class="actions"><button class="btn" data-act="cloud-backups">Show OneDrive backups</button></div></div></div>' : '') +
       '<p class="hint" style="margin:0">Portfolio Studio version ' + APP_VERSION + ' (build ' + APP_BUILD + ').</p></section>';
   }
+  var LOCK_AFTER = [[0, 'Right away'], [1, 'After 1 minute'], [5, 'After 5 minutes'], [15, 'After 15 minutes']];
+  function lockCard() {
+    var l = lockPrefs(), after = prefs.lock && prefs.lock.after != null ? n(prefs.lock.after) : 1;
+    var head = '<section class="card set-card" aria-labelledby="setLock"><h2 id="setLock">App lock</h2><p>Ask for Face ID, Touch ID or your device passcode before showing anything. For this device only; each device turns it on separately. It hides the app, it doesn’t encrypt your data.</p>';
+    if (!window.PublicKeyCredential || !window.isSecureContext) return head + '<p class="status-line">Not available here. App lock needs the published site (or localhost) in a browser with Face ID, Touch ID or Windows Hello.</p></section>';
+    return head + '<div class="seg seg-view" role="group" aria-labelledby="setLock"><button type="button" data-act="lock-set" data-val="off" aria-pressed="' + !l + '">Off</button><button type="button" data-act="lock-set" data-val="on" aria-pressed="' + !!l + '">On</button></div>' +
+      '<div class="field"><label for="lockAfter">Lock again when the app has been in the background</label><select id="lockAfter" class="mini" data-fk="lockAfter"' + (l ? '' : ' disabled') + '>' +
+      LOCK_AFTER.map(function (o) { return '<option value="' + o[0] + '"' + (after === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+      '<span class="hint">The screen is always covered while the app is in the background, so the app switcher doesn’t show your numbers.</span></div>' +
+      (l ? '<div class="actions"><button type="button" class="btn" data-act="lock-now">Lock now</button></div>' : '') + '</section>';
+  }
   function renderSettings() {
     var f = state.feed, prov = FEEDS[f.provider] || FEEDS.finnhub, key = prefs.keys[f.provider] || '', st = state.settings;
     var provOpts = Object.keys(FEEDS).map(function (k) { return '<option value="' + k + '"' + (f.provider === k ? ' selected' : '') + '>' + FEEDS[k].label + '</option>'; }).join('');
@@ -3346,6 +3472,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<section class="card set-card" aria-labelledby="setPlan"><h2 id="setPlan">Cash reserve</h2><p>Used on the Overview to show how much cash sits above, or below, your emergency reserve.</p>' +
       '<div class="field"><label for="s_monthlyExpenses">Monthly spending ($)</label><input id="s_monthlyExpenses" type="number" min="0" step="100" inputmode="decimal" value="' + esc(n(st.monthlyExpenses)) + '" data-set="monthlyExpenses" data-fk="s_monthlyExpenses"></div>' +
       '<div class="field"><label for="s_reserveMonths">Months to keep in reserve</label><input id="s_reserveMonths" type="number" min="0" step="1" inputmode="numeric" value="' + esc(n(st.reserveMonths)) + '" data-set="reserveMonths" data-fk="s_reserveMonths"></div></section>' +
+      lockCard() +
       '<section class="card set-card" aria-labelledby="setLook"><h2 id="setLook">Appearance</h2><p>Follow your system setting, or pick one.</p><div class="seg seg-theme" role="group" aria-labelledby="setLook">' + themeBtns + '</div></section>' +
       '</div>';
   }
@@ -3558,7 +3685,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       var r = state.stocks.filter(function (x) { return !x.manual; })[0], sym = r ? String(r.symbol || r.ticker).toUpperCase() : 'AAPL';
       out.innerHTML = '<div class="status-line">Checking ' + esc(sym) + ' with ' + esc(prov.label) + '…</div>';
       prov.quote(sym, feedKey()).then(function (q) {
-        out.innerHTML = '<div class="status-line ok">Connected. ' + esc(sym) + ' is ' + money2(q.price) + '.</div>';
+        out.innerHTML = '<div class="status-line ok">Connected. ' + esc(sym) + ' is ' + px(q.price) + '.</div>';
         paintLive();
       }, function (e) { out.innerHTML = '<div class="status-line bad">' + esc(e.message) + '</div>'; });
     },
@@ -3576,6 +3703,17 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       var feed = state.feed; state = seed(); state.feed = feed; save(); render(); toast('Sample data loaded');
     },
     'reload': function () { location.reload(); },
+    'unlock': function () { unlock(); },
+    'lock-now': function () { lockNow(); },
+    'lock-set': function (el) { var on = el.dataset.val === 'on'; if (on === !!lockPrefs()) return; if (on) enableLock(); else disableLock(); },
+    'lock-signout': function () {
+      if (!confirm('Sign out and remove your data from this device?\n\nYour data stays in OneDrive (except changes from this device that haven’t synced yet). Signing in again brings it back.')) return;
+      lockState.locked = false; document.documentElement.classList.remove('locked', 'veiled');
+      $('#lock').hidden = true; $('#lock').innerHTML = '';
+      prefs.lock = { on: false, after: prefs.lock ? prefs.lock.after : 1 };
+      signOutHere();
+    },
+    'hide-amounts': function () { prefs.hide = !prefs.hide; savePrefs(); render(); toast(prefs.hide ? 'Amounts hidden on this device' : 'Amounts shown'); },
     'demo': function (el) { showSample(el.dataset.val === 'on'); },
     'restore-local': function (el) {
       var b = loadBackups()[+el.dataset.i]; if (!b) return;
@@ -3661,6 +3799,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       else if (fk === 'autoMins' || fk === 'marketHoursOnly') setTimeout(autoTick, 50);
       return;
     }
+    if (el.id === 'lockAfter') { prefs.lock = Object.assign({}, prefs.lock, { after: n(el.value) }); savePrefs(); return; }
     if (el.id === 'hsort') { var sp = el.value.split(':'); ui.sort = { key: sp[0], dir: +sp[1] }; render(); return; }
     if (el.id === 'feedKey') { prefs.keys[state.feed.provider] = el.value.trim(); savePrefs(); paintLive(); }
     if (el.id === 'feedKey2') { prefs.keys[altProvider()] = el.value.trim(); savePrefs(); }
