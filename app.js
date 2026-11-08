@@ -47,6 +47,7 @@ function seed() {
     feed: defaultFeed(),
     history: [],
     market: {},
+    tax: defaultTax(),
     stocks: raw.map(function (r) {
       return { id: uid(), ticker: r[0], symbol: '', company: r[1], type: r[2], qty: r[3], cost: r[4], price: r[5],
         manual: r[5] === null, prevClose: null, quoteTime: r[5] === null ? null : snap, quoteSource: r[5] === null ? '' : 'Sample', quoteError: null };
@@ -75,7 +76,8 @@ function normalize(s) {
     settings: Object.assign({}, defaultSettings(), s && s.settings),
     feed: Object.assign({}, defaultFeed(), s && s.feed),
     history: s && Array.isArray(s.history) ? s.history : [],
-    market: s && s.market && typeof s.market === 'object' && !Array.isArray(s.market) ? s.market : {}
+    market: s && s.market && typeof s.market === 'object' && !Array.isArray(s.market) ? s.market : {},
+    tax: Object.assign(defaultTax(), s && s.tax && typeof s.tax === 'object' ? s.tax : {})
   };
   if (s && s.settings && s.settings.goalMonthly == null && s.settings.goalIncome != null) out.settings.goalMonthly = Math.round(n(s.settings.goalIncome) / 12);
   delete out.settings.goalIncome;
@@ -397,6 +399,96 @@ function concFindings(s) {
   return out;
 }
 
+/* This year's federal tax estimate. Figures for tax year 2026, checked against IRS sources (Nov 2026):
+   Rev. Proc. 2025-32 (brackets, standard deduction, capital-gains thresholds, child tax credit $2,200),
+   IR-2025-111 (401(k) $24,500; catch-up $8,000 at 50+, $11,250 at 60-63), the IRS Working Families Tax Cuts page
+   (non-itemizer charitable deduction $1,000 / $2,000). The state-and-local cap ($40,400, phasing down by 30% of income
+   over $505,000 to a $10,000 floor) and the 0.5%-of-income floor on itemized charity are from the 2025 law and
+   weren't found on an IRS page. NIIT and Additional Medicare thresholds are fixed in law (not indexed).
+   Leaves out: AMT, other credits, self-employment tax, the senior / tips / overtime / car-loan deductions, state tax. */
+var TAX_YEAR = 2026;
+var TAX = {
+  std: { single: 16100, mfj: 32200, hoh: 24150 },
+  brackets: {
+    single: [[12400, 0.10], [50400, 0.12], [105700, 0.22], [201775, 0.24], [256225, 0.32], [640600, 0.35], [Infinity, 0.37]],
+    mfj: [[24800, 0.10], [100800, 0.12], [211400, 0.22], [403550, 0.24], [512450, 0.32], [768700, 0.35], [Infinity, 0.37]],
+    hoh: [[17700, 0.10], [67450, 0.12], [105700, 0.22], [201750, 0.24], [256200, 0.32], [640600, 0.35], [Infinity, 0.37]]
+  },
+  cg: { single: [49450, 545500], mfj: [98900, 613700], hoh: [66200, 579600] },
+  ctc: 2200, ctcPhase: { single: 200000, mfj: 400000, hoh: 200000 },
+  salt: 40400, saltPhase: 505000, saltFloor: 10000,
+  charityNonItem: { single: 1000, mfj: 2000, hoh: 1000 },
+  niit: { single: 200000, mfj: 250000, hoh: 200000 },
+  addlMed: { single: 200000, mfj: 250000, hoh: 200000 },
+  k401: 24500, k401Catch: 8000, k401Catch6063: 11250,
+  capLoss: 3000
+};
+function defaultTax() {
+  return { status: 'mfj', kids: 0, wages: 0, bonus: 0, withheld: 0, checksLeft: 0, perCheck: 0, k401Pre: 0, k401Roth: 0, hsa: 0, otherPre: 0,
+    interest: null, divQual: 0, divOrd: 0, ltGains: 0, stGains: 0, otherInc: 0, mortInt: null, propTax: 0, charity: 0, estPaid: 0, priorTax: 0, priorHigh: true, asOf: '' };
+}
+// Interest this year from savings and CDs at today's balances and APYs (a full year's worth).
+function taxInterestEst(s) {
+  return s.cash.reduce(function (a, r) { return a + n(r.balance) * n(r.apy) / 100; }, 0) + s.cds.reduce(function (a, r) { return a + cdValueNow(r) * n(r.apy) / 100; }, 0);
+}
+// Mortgage interest over 12 months from today's balance, rate and payment (loans of type Mortgage only).
+function taxMortgageEst(s) {
+  return s.mortgage.filter(function (r) { return (r.kind || 'Mortgage') === 'Mortgage'; }).reduce(function (a, r) {
+    var b = n(r.balance), i = n(r.rate) / 1200, p = n(r.payment), sum = 0;
+    for (var m = 0; m < 12 && b > 0; m++) { var int = b * i; sum += int; b = Math.max(0, b - Math.max(0, p - int)); }
+    return a + sum;
+  }, 0);
+}
+function bracketTax(x, br) {
+  var tax = 0, lo = 0;
+  for (var i = 0; i < br.length && x > lo; i++) { tax += (Math.min(x, br[i][0]) - lo) * br[i][1]; lo = br[i][0]; }
+  return tax;
+}
+// tx: the tax inputs; est: { interest, mortInt } estimates used where the inputs are left blank; age: for the 401(k) limit.
+function fedTax(tx, est, age) {
+  var S = TAX.std[tx.status] ? tx.status : 'mfj', br = TAX.brackets[S];
+  var interest = tx.interest == null || tx.interest === '' ? n(est.interest) : n(tx.interest);
+  var mortInt = tx.mortInt == null || tx.mortInt === '' ? n(est.mortInt) : n(tx.mortInt);
+  var gross = n(tx.wages) + n(tx.bonus), pre = n(tx.k401Pre) + n(tx.hsa) + n(tx.otherPre);
+  var wagesTaxable = Math.max(0, gross - pre);
+  var netCap = n(tx.stGains) + n(tx.ltGains), capInc = netCap >= 0 ? netCap : Math.max(netCap, -TAX.capLoss);
+  var prefLT = Math.max(0, Math.min(n(tx.ltGains), netCap));
+  var agi = wagesTaxable + interest + n(tx.divOrd) + n(tx.divQual) + capInc + n(tx.otherInc);
+  var saltCap = agi > TAX.saltPhase ? Math.max(TAX.saltFloor, TAX.salt - 0.3 * (agi - TAX.saltPhase)) : TAX.salt;
+  var saltUsed = Math.min(n(tx.propTax), saltCap), charityItem = Math.max(0, n(tx.charity) - 0.005 * agi);
+  var itemized = saltUsed + mortInt + charityItem, std = TAX.std[S], charityStd = Math.min(n(tx.charity), TAX.charityNonItem[S]);
+  var itemize = itemized > std + charityStd;
+  var deduction = itemize ? itemized : std + charityStd;
+  var taxable = Math.max(0, agi - deduction);
+  var pref = Math.min(taxable, n(tx.divQual) + prefLT), ordinary = taxable - pref;
+  var ordTax = bracketTax(ordinary, br), z = TAX.cg[S];
+  var at0 = Math.max(0, Math.min(taxable, z[0]) - ordinary), at15 = Math.max(0, Math.min(taxable, z[1]) - Math.max(ordinary, z[0]));
+  at0 = Math.min(at0, pref); at15 = Math.min(at15, pref - at0); var at20 = Math.max(0, pref - at0 - at15);
+  var prefTax = at15 * 0.15 + at20 * 0.20, incomeTax = ordTax + prefTax;
+  var ctcFull = TAX.ctc * Math.max(0, Math.round(n(tx.kids))), ctc = Math.max(0, ctcFull - 50 * Math.ceil(Math.max(0, agi - TAX.ctcPhase[S]) / 1000));
+  var credits = Math.min(ctc, incomeTax);
+  var nii = interest + n(tx.divOrd) + n(tx.divQual) + Math.max(0, netCap), niit = 0.038 * Math.max(0, Math.min(nii, agi - TAX.niit[S]));
+  // Additional Medicare tax: owed on wages over the filing-status threshold; employers withhold it on wages over $200,000.
+  var medWages = Math.max(0, gross - n(tx.hsa) - n(tx.otherPre));
+  var addlMed = 0.009 * Math.max(0, medWages - TAX.addlMed[S]), addlMedWithheld = 0.009 * Math.max(0, medWages - 200000);
+  var total = Math.max(0, incomeTax - credits) + niit + addlMed;
+  var withholding = n(tx.withheld) + Math.max(0, Math.round(n(tx.checksLeft))) * n(tx.perCheck);
+  var payments = withholding + n(tx.estPaid) + addlMedWithheld;
+  var balance = total - payments;   // positive: you'd owe; negative: refund
+  var marginal = 0; for (var i = 0; i < br.length; i++) if (ordinary <= br[i][0]) { marginal = br[i][1]; break; }
+  if (ordinary <= 0) marginal = 0.10;
+  var safeNeed = n(tx.priorTax) > 0 ? Math.min(0.9 * total, (tx.priorHigh ? 1.1 : 1) * n(tx.priorTax)) : 0.9 * total;
+  var a = Math.round(n(age)), limit = TAX.k401 + (a >= 60 && a <= 63 ? TAX.k401Catch6063 : a >= 50 ? TAX.k401Catch : 0);
+  var income = gross + interest + n(tx.divOrd) + n(tx.divQual) + Math.max(0, netCap) + n(tx.otherInc);
+  return {
+    status: S, gross: gross, pre: pre, wagesTaxable: wagesTaxable, interest: interest, interestAuto: tx.interest == null || tx.interest === '', capInc: capInc, agi: agi,
+    itemize: itemize, itemized: itemized, std: std, charityStd: charityStd, saltUsed: saltUsed, saltCap: saltCap, mortInt: mortInt, mortAuto: tx.mortInt == null || tx.mortInt === '', charityItem: charityItem, deduction: deduction,
+    taxable: taxable, ordinary: ordinary, pref: pref, ordTax: ordTax, prefTax: prefTax, incomeTax: incomeTax, ctc: ctc, credits: credits, niit: niit, addlMed: addlMed, addlMedWithheld: addlMedWithheld,
+    total: total, withholding: withholding, payments: payments, balance: balance, marginal: marginal, effective: income > 0 ? total / income : 0,
+    safeNeed: safeNeed, safe: payments >= safeNeed || balance < 1000, k401Limit: limit, k401Room: Math.max(0, limit - n(tx.k401Pre) - n(tx.k401Roth)), income: income
+  };
+}
+
 // One row per year; each step is 12 months from today.
 // Rows also carry running totals of contributions and of CD money moved to savings, so each account's
 // growth can be split into "what you put in" and "what it earned".
@@ -703,7 +795,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.10.10', APP_BUILD = 2026100908;
+  var APP_VERSION = '2026.11.07', APP_BUILD = 2026110701;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -1368,7 +1460,9 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   }
 
   /* ---------- rendering ---------- */
-  var VIEWS = [['overview', 'Overview'], ['stocks', 'Stocks'], ['accounts', 'Accounts'], ['projections', 'Projections'], ['insights', 'Insights'], ['settings', 'Settings']];
+  var VIEWS = [['overview', 'Overview'], ['stocks', 'Stocks'], ['accounts', 'Accounts'], ['projections', 'Projections'], ['insights', 'Insights'], ['settings', 'Settings'], ['tax', 'This year’s tax']];
+  // Pages reached from another page rather than the menu, and the menu item they belong to.
+  var SUBPAGES = { tax: 'projections' };
   function currentView() {
     var h = (location.hash || '').replace(/^#\/?/, '');
     return VIEWS.some(function (v) { return v[0] === h; }) ? h : 'overview';
@@ -1380,12 +1474,12 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     var view = currentView();
     var active = document.activeElement, fk = active && active.getAttribute && active.getAttribute('data-fk');
     var navHtml = function (cls) {
-      return VIEWS.map(function (v) {
-        return '<a href="#/' + v[0] + '"' + (v[0] === view ? ' aria-current="page"' : '') + '>' + icon(v[0]) + '<span>' + v[1] + '</span></a>';
+      return VIEWS.filter(function (v) { return !SUBPAGES[v[0]]; }).map(function (v) {
+        return '<a href="#/' + v[0] + '"' + (v[0] === view || SUBPAGES[view] === v[0] ? ' aria-current="page"' : '') + '>' + icon(v[0]) + '<span>' + v[1] + '</span></a>';
       }).join('');
     };
     $('#nav').innerHTML = navHtml(); $('#mnav').innerHTML = navHtml();
-    var body = { overview: renderOverview, stocks: renderStocks, accounts: renderAccounts, projections: renderProjections, insights: renderInsights, settings: renderSettings }[view]();
+    var body = { overview: renderOverview, stocks: renderStocks, accounts: renderAccounts, projections: renderProjections, insights: renderInsights, settings: renderSettings, tax: renderTax }[view]();
     $('#main').innerHTML = renderTopline() + renderBanners() + body;
     renderSideFoot();
     document.title = 'Portfolio Studio · ' + VIEWS.filter(function (v) { return v[0] === view; })[0][1];
@@ -2012,6 +2106,92 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<p class="note">Stocks and funds live on the <a href="#/stocks">Stocks</a> page, where prices can refresh automatically.</p></div>';
   }
 
+  /* ---------- this year's federal tax ---------- */
+  var TAX_STATUS = [['mfj', 'Married filing jointly'], ['single', 'Single'], ['hoh', 'Head of household']];
+  var TAX_FIELDS = {
+    pay: [['wages', 'Salary for the whole year ($)', 'Gross pay before any deductions, for all of ' + TAX_YEAR + '.'], ['bonus', 'Bonus or other pay ($)', 'Bonuses, commissions or RSUs vesting this year.'],
+      ['withheld', 'Federal tax withheld so far ($)', 'Year-to-date federal income tax on your latest pay stub (not Social Security or Medicare).'],
+      ['checksLeft', 'Paychecks left this year', ''], ['perCheck', 'Federal tax withheld per paycheck ($)', 'From your latest pay stub.'], ['kids', 'Children under 17', 'For the $2,200-per-child credit.']],
+    pre: [['k401Pre', 'Your pre-tax 401(k) for the year ($)', 'Your own contributions only, not the employer match. These lower your taxable pay.'], ['k401Roth', 'Your Roth 401(k) for the year ($)', 'Doesn’t lower this year’s tax, but counts toward the limit.'],
+      ['hsa', 'HSA through payroll ($)', ''], ['otherPre', 'Other pre-tax deductions ($)', 'For example health, dental and vision premiums, or a dependent-care FSA.']],
+    inv: [['interest', 'Interest from savings and CDs ($)', 'Leave blank to use the estimate from your accounts.', 'auto'], ['divQual', 'Qualified dividends ($)', 'Most stock and stock-fund dividends.'], ['divOrd', 'Other dividends ($)', 'For example bond funds and money markets.'],
+      ['ltGains', 'Gains from selling, held over a year ($)', 'Net of losses. Use a negative number for a net loss.'], ['stGains', 'Gains from selling, held a year or less ($)', 'Net of losses.'], ['otherInc', 'Other taxable income ($)', 'For example rental or side income, after its expenses.']],
+    ded: [['mortInt', 'Mortgage interest this year ($)', 'Leave blank to use the estimate from your mortgage.', 'auto'], ['propTax', 'Property tax ($)', 'Texas has no state income tax, so this is your state and local tax.'], ['charity', 'Charitable giving ($)', 'Cash gifts. If you don’t itemize, up to $1,000 ($2,000 married) still counts.']],
+    last: [['estPaid', 'Estimated tax payments made ($)', ''], ['priorTax', 'Last year’s total tax ($)', 'Line 24 of last year’s Form 1040. Used for the penalty check.']]
+  };
+  function taxEst() { return { interest: taxInterestEst(state), mortInt: taxMortgageEst(state) }; }
+  function taxCalc(over) { return fedTax(Object.assign({}, state.tax, over || {}), taxEst(), n(state.settings.goalAge)); }
+  function taxHas() { var t = state.tax; return n(t.wages) + n(t.bonus) > 0; }
+  function taxInput(f) {
+    var k = f[0], v = state.tax[k], auto = f[3] === 'auto', est = taxEst(), ph = auto ? 'Estimate: ' + money0(k === 'interest' ? est.interest : est.mortInt) : '0';
+    var val = v == null || v === '' || (!auto && !n(v)) ? '' : esc(v);
+    return '<div class="field"><label for="tx_' + k + '">' + f[1] + '</label><input id="tx_' + k + '" type="number" step="any" inputmode="decimal" placeholder="' + esc(ph) + '" value="' + val + '" data-tax="' + k + '" data-fk="tx_' + k + '">' +
+      (f[2] ? '<span class="hint">' + f[2] + '</span>' : '') + '</div>';
+  }
+  function taxOutputs() {
+    if (!taxHas()) return '<article class="card tax-result empty-tax"><div class="eyebrow">Federal tax · ' + TAX_YEAR + ' estimate</div><h2>Enter your pay below to see where you stand.</h2><p>You need your salary, the federal tax withheld so far, and what’s withheld per paycheck. They’re on your latest pay stub.</p></article>';
+    var r = taxCalc(), b = r.balance, tx = state.tax;
+    var verdict = b > 50 ? '<b class="neg">You’d owe about ' + money0(b) + '</b>' : b < -50 ? '<b class="pos">Refund of about ' + money0(-b) + '</b>' : '<b>About even</b>';
+    var safe = b <= 0 ? '' : r.safe
+      ? '<p class="tax-safe ok">No underpayment penalty expected: ' + (b < 1000 ? 'you’d owe under $1,000.' : 'you’re paying at least ' + money0(r.safeNeed) + (n(tx.priorTax) > 0 ? ', the lower of 90% of this year’s tax and ' + (tx.priorHigh ? '110%' : '100%') + ' of last year’s.' : ', 90% of this year’s tax.')) + '</p>'
+      : '<p class="tax-safe bad">You may owe an underpayment penalty: payments are below ' + money0(r.safeNeed) + (n(tx.priorTax) > 0 ? ', the lower of 90% of this year’s tax and ' + (tx.priorHigh ? '110%' : '100%') + ' of last year’s.' : ' (90% of this year’s tax). Adding last year’s tax below may lower that bar.') + '</p>';
+    var head = '<article class="card tax-result"><div class="eyebrow">Federal tax · ' + TAX_YEAR + ' estimate' + (tx.asOf ? ' · updated ' + esc(fmtDate(tx.asOf)) : '') + '</div>' +
+      '<div class="tax-verdict">' + verdict + '</div>' +
+      '<div class="tax-nums"><div><span>Projected tax for the year</span><b>' + money0(r.total) + '</b></div><div><span>Paid through withholding' + (n(tx.estPaid) ? ' and estimates' : '') + '</span><b>' + money0(r.payments) + '</b></div>' +
+      '<div><span>Tax bracket · effective rate</span><b>' + Math.round(r.marginal * 100) + '% · ' + pct(r.effective * 100) + '</b></div></div>' + safe + '</article>';
+    // What would change it
+    var tips = [];
+    if (r.k401Room > 0.5 && n(tx.k401Pre) + n(tx.k401Roth) >= 0) {
+      var all = r.total - taxCalc({ k401Pre: n(tx.k401Pre) + r.k401Room }).total, one = r.total - taxCalc({ k401Pre: n(tx.k401Pre) + Math.min(1000, r.k401Room) }).total;
+      tips.push('<li><b>Put up to ' + money0(r.k401Room) + ' more into your 401(k) as pre-tax before December 31.</b> That would cut this year’s tax by about ' + money0(all) + ' (about ' + money0(one) + ' per $1,000). Your limit is ' + money0(r.k401Limit) + (r.k401Limit > TAX.k401 ? ', including the age-' + (r.k401Limit - TAX.k401 > TAX.k401Catch ? '60–63' : '50+') + ' catch-up. If you earned over about $150,000 last year, the catch-up part may have to go in as Roth, which doesn’t lower this year’s tax' : '') + '.</li>');
+    }
+    var left = Math.round(n(tx.checksLeft));
+    if (b > 50 && left > 0) tips.push('<li><b>Withhold about ' + money0(Math.ceil(b / left)) + ' more per paycheck</b> for your ' + left + ' remaining paycheck' + (left === 1 ? '' : 's') + ' to come out about even (extra withholding goes on line 4(c) of your W-4).</li>');
+    if (b < -1000 && left > 0) tips.push('<li><b>You could withhold about ' + money0(Math.floor(-b / left)) + ' less per paycheck</b> for your ' + left + ' remaining paycheck' + (left === 1 ? '' : 's') + ' and still break even, if you’d rather have the money now than as a refund.</li>');
+    if (b > 50 && !left) tips.push('<li><b>No paychecks left to adjust.</b> An estimated payment by January 15 can cover the rest.</li>');
+    var help = tips.length ? '<article class="card tax-help"><h3>What would change it</h3><ul>' + tips.join('') + '</ul></article>' : '';
+    // Breakdown
+    var row = function (l, v, cls, note) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + l + (note ? ' <span class="muted">' + note + '</span>' : '') + '</td><td class="num">' + v + '</td></tr>'; };
+    var neg = function (v) { return v > 0.5 ? '−' + money0(v) : money0(0); };
+    var tbl = '<article class="card tax-tblcard"><details class="tbl tax-tbl"' + (ui.taxOpen ? ' open' : '') + ' data-taxtbl><summary>How it’s worked out</summary><div class="tablewrap"><table><tbody>' +
+      row('Salary and bonus', money0(r.gross)) + row('Pre-tax 401(k), HSA and other', neg(r.pre)) +
+      row('Interest', money0(r.interest), '', r.interestAuto ? '(estimate from your accounts)' : '') +
+      (n(tx.divQual) + n(tx.divOrd) ? row('Dividends', money0(n(tx.divQual) + n(tx.divOrd))) : '') +
+      (r.capInc ? row('Capital gains' + (r.capInc < 0 ? ' (loss, up to $3,000)' : ''), money0(r.capInc)) : '') +
+      (n(tx.otherInc) ? row('Other income', money0(n(tx.otherInc))) : '') +
+      row('Adjusted gross income', money0(r.agi), 'sub') +
+      (r.itemize ? row('Itemized deductions', neg(r.deduction), '', '(property tax ' + money0(r.saltUsed) + ', mortgage interest ' + money0(r.mortInt) + (r.mortAuto ? ' estimated' : '') + (r.charityItem ? ', charity ' + money0(r.charityItem) : '') + ')')
+        : row('Standard deduction', neg(r.std), '', r.itemized > 0 ? '(larger than itemizing ' + money0(r.itemized) + ')' : '') + (r.charityStd ? row('Charity, without itemizing', neg(r.charityStd)) : '')) +
+      row('Taxable income', money0(r.taxable), 'sub') +
+      row('Tax on ordinary income', money0(r.ordTax), '', '(top bracket ' + Math.round(r.marginal * 100) + '%)') +
+      (r.pref ? row('Tax on qualified dividends and long-term gains', money0(r.prefTax), '', '(0 / 15 / 20% rates)') : '') +
+      (r.credits ? row('Child tax credit', neg(r.credits)) : '') +
+      (r.niit ? row('Net investment income tax (3.8%)', money0(r.niit)) : '') +
+      (r.addlMed ? row('Additional Medicare tax (0.9%)', money0(r.addlMed)) : '') +
+      row('Total federal tax', money0(r.total), 'sub') +
+      row('Withheld so far', money0(n(tx.withheld))) + (left ? row('Withholding still to come', money0(left * n(tx.perCheck)), '', '(' + left + ' × ' + money0(n(tx.perCheck)) + ')') : '') +
+      (n(tx.estPaid) ? row('Estimated payments', money0(n(tx.estPaid))) : '') + (r.addlMedWithheld ? row('Additional Medicare withheld by your employer', money0(r.addlMedWithheld)) : '') +
+      row(b > 0 ? 'You’d owe' : 'Refund', money0(Math.abs(b)), 'sub ' + (b > 50 ? 'neg' : b < -50 ? 'pos' : '')) +
+      '</tbody></table></div></details></article>';
+    return head + help + tbl;
+  }
+  function renderTax() {
+    var tx = state.tax, more = ['interest', 'divQual', 'divOrd', 'ltGains', 'stGains', 'otherInc', 'mortInt', 'propTax', 'charity', 'estPaid', 'priorTax'].some(function (k) { return tx[k] != null && tx[k] !== '' && n(tx[k]) !== 0; });
+    var st = '<div class="field"><label for="tx_status">Filing status</label><select id="tx_status" data-tax="status" data-fk="tx_status">' + TAX_STATUS.map(function (o) { return '<option value="' + o[0] + '"' + (tx.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>';
+    var grp = function (title, keys) { return '<div class="tax-grp"><h3>' + title + '</h3>' + keys.map(taxInput).join('') + '</div>'; };
+    return '<header class="head"><div><div class="eyebrow">Projections · federal tax</div><h1>Refund or owe? Check in before December.</h1></div><div class="actions"><a class="btn" href="#/projections">‹ Projections</a></div></header>' +
+      '<div id="taxOut">' + taxOutputs() + '</div>' +
+      '<section class="card tax-inputs" aria-labelledby="taxIn"><div class="panel-head"><div><h2 id="taxIn">Your numbers</h2><p>From your latest pay stub. Saved with the rest of your data and synced like it; update them every few paychecks.</p></div></div>' +
+      '<div class="tax-form">' + '<div class="tax-grp"><h3>Pay</h3>' + st + TAX_FIELDS.pay.map(taxInput).join('') + '</div>' + grp('Before-tax savings', TAX_FIELDS.pre) + '</div>' +
+      '<details class="tax-more"' + (more ? ' open' : '') + '><summary>Investments, deductions and last year’s tax (optional)</summary><div class="tax-form">' +
+      grp('Investment income', TAX_FIELDS.inv) + grp('Deductions', TAX_FIELDS.ded) +
+      '<div class="tax-grp"><h3>Payments and last year</h3>' + TAX_FIELDS.last.map(taxInput).join('') +
+      '<label class="check"><input type="checkbox" data-tax="priorHigh" data-fk="tx_priorHigh"' + (tx.priorHigh ? ' checked' : '') + '> Last year’s income (AGI) was over $150,000</label><span class="hint">Then the safe amount is 110% of last year’s tax instead of 100%.</span></div>' +
+      '</div></details></section>' +
+      '<p class="note">An estimate for planning, not tax advice. Uses ' + TAX_YEAR + ' IRS figures. Leaves out the alternative minimum tax, credits other than the child tax credit, self-employment tax, and the new senior, tips, overtime and car-loan deductions. Interest and mortgage interest are estimated from your accounts unless you enter them.</p>';
+  }
+  function refreshTax() { var o = $('#taxOut'); if (o) o.innerHTML = taxOutputs(); }
+
   /* ---------- projections ---------- */
   function stackedChart(rows) {
     var W = 900, H = 310, L = 64, R = 12, T = 14, B = 34;
@@ -2329,7 +2509,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     };
     var hz = Math.round(n(st.horizon)) || 15;
     return '<header class="head"><div><div class="eyebrow">Projection lab</div><h1 id="projH1">See the next ' + hz + ' years before they happen.</h1></div>' +
-      '<div class="actions"><div class="seg seg-view" role="group" aria-label="Projection view">' + segBtns('projview', st.projView, VIEW_OPTS) + '</div><button class="btn" data-act="reset-proj">Reset assumptions</button></div></header>' +
+      '<div class="actions"><div class="seg seg-view" role="group" aria-label="Projection view">' + segBtns('projview', st.projView, VIEW_OPTS) + '</div><a class="btn" href="#/tax">This year’s tax</a><button class="btn" data-act="reset-proj">Reset assumptions</button></div></header>' +
       '<div class="proj"><aside class="card controls" aria-label="Projection assumptions"><h3>Assumptions</h3>' +
       '<div class="cg"><div class="cl"><span id="taxLab">Show values</span></div><div class="seg seg2" role="group" aria-labelledby="taxLab">' + segBtns('aftertax', st.afterTax ? 'after' : 'before', [['before', 'Before tax'], ['after', 'After tax']]) + '</div><p class="note" style="margin:8px 0 0">' + taxSummary() + ' <a href="#/settings">Change rates</a></p></div>' +
       '<div class="cg"><div class="cl"><span id="scenLab">Market scenario</span></div><div class="seg" role="group" aria-labelledby="scenLab">' + segBtns('scenario', st.scenario, Object.keys(SCEN).map(function (k) { return [k, SCEN[k].label]; })) + '</div></div>' +
@@ -3356,6 +3536,13 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     actions[el.dataset.act](el, e);
   });
   // Live redraw of projection results while typing or dragging.
+  // Tax inputs: the result updates as you type; the numbers save a moment later.
+  function taxVal(el) { var k = el.dataset.tax; return el.type === 'checkbox' ? el.checked : k === 'status' ? el.value : el.value === '' ? (k === 'interest' || k === 'mortInt' ? null : 0) : n(el.value); }
+  document.addEventListener('input', function (e) {
+    var el = e.target; if (!el.dataset || !el.dataset.tax || el.type === 'checkbox') return;
+    state.tax[el.dataset.tax] = taxVal(el); state.tax.asOf = today(); saveSoon(); refreshTax();
+  });
+  document.addEventListener('toggle', function (e) { if (e.target.dataset && e.target.hasAttribute('data-taxtbl')) ui.taxOpen = e.target.open; }, true);
   document.addEventListener('input', function (e) {
     var el = e.target, key = el.dataset && el.dataset.set;
     if (!key || !$('#projOut') || el.type === 'checkbox') return;
@@ -3384,6 +3571,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       if ($('#projOut')) refreshProjOutputs(); else if (currentView() === 'settings') setTimeout(render, 0); else renderSideFoot();
       return;
     }
+    if (ds.tax) { state.tax[ds.tax] = taxVal(el); state.tax.asOf = today(); save(); refreshTax(); return; }
     if (ds.feed) {
       var fk = ds.feed;
       state.feed[fk] = el.type === 'checkbox' ? el.checked : fk === 'autoMins' ? parseInt(el.value, 10) : el.value;
