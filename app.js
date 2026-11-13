@@ -797,7 +797,7 @@ var MARKET = [['DIA', 'Dow Jones', 'Dow'], ['SPY', 'S&P 500', 'S&P 500'], ['QQQ'
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.11.13', APP_BUILD = 2026111302;
+  var APP_VERSION = '2026.11.13', APP_BUILD = 2026111304;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -2259,12 +2259,13 @@ var MARKET = [['DIA', 'Dow Jones', 'Dow'], ['SPY', 'S&P 500', 'S&P 500'], ['QQQ'
       var q = marketQuote(m[0]), d = q && n(q.prevClose) > 0 ? (n(q.price) - n(q.prevClose)) / n(q.prevClose) * 100 : null;
       if (q) asOf = Math.max(asOf, n(q.quoteTime));
       return '<span class="mk" title="' + esc(m[1]) + ', tracked through the ' + m[0] + ' fund' + (q ? ' (' + m[0] + ' ' + px(n(q.price)) + ')' : '') + '"><span>' + esc(m[2]) + '</span>' +
-        (d == null ? '<b class="muted">—</b>' : '<b class="' + (d < 0 ? 'neg' : 'pos') + '">' + (d < 0 ? '▼ ' : '▲ ') + sgnPct(d) + '</b>') + '<small>via ' + m[0] + '</small></span>';
+        (d == null ? '<b class="muted">—</b>' : '<b class="' + (d < 0 ? 'neg' : 'pos') + '">' + (d < 0 ? '▼ ' : '▲ ') + sgnPct(d) + '</b>') + '<small>' + (q ? px(n(q.price)) : '') +
+        (q && d != null ? '<span class="mk-ch">' + pxSigned(n(q.price) - n(q.prevClose)) + '</span>' : '') + '</small></span>';
     });
     var tot = 0, prevTot = 0;
     state.stocks.forEach(function (r) { var d = r.manual ? null : dayOf(r); if (d) { tot += n(r.qty) * d.chg; prevTot += n(r.qty) * r.prevClose; } });
-    if (prevTot) cells.push('<span class="mk mk-you" title="Your auto-priced holdings, weighted by value"><span>Your stocks</span><b class="' + (tot < 0 ? 'neg' : 'pos') + '">' + (tot < 0 ? '▼ ' : '▲ ') + sgnPct(tot / prevTot * 100) + '</b></span>');
-    return '<div class="mk-row"><div class="mk-head"><span>Markets today</span>' + (asOf ? '<small>as of ' + esc(when(asOf)) + '</small>' : '<small>after a live refresh</small>') + '</div><div class="mk-grid">' + cells.join('') + '</div></div>';
+    if (prevTot) cells.push('<span class="mk mk-you" title="Your auto-priced holdings, weighted by value"><span><span class="desk-only">Your stocks</span><span class="phone-only">Yours</span></span><b class="' + (tot < 0 ? 'neg' : 'pos') + '">' + (tot < 0 ? '▼ ' : '▲ ') + sgnPct(tot / prevTot * 100) + '</b><small>' + signed(tot) + ' today</small></span>');
+    return '<div class="mk-row"><div class="mk-head"><span>Markets today</span>' + (asOf ? '<small>as of ' + esc(when(asOf)) + '</small>' : '<small>after a live refresh</small>') + '</div><div class="mk-grid">' + cells.join('') + '</div><p class="mk-foot">Prices are of the DIA, SPY and QQQ funds that track each index.</p></div>';
   }
   function tickerTape() {
     var items = [], seen = {};
@@ -3237,7 +3238,7 @@ var MARKET = [['DIA', 'Dow Jones', 'Dow'], ['SPY', 'S&P 500', 'S&P 500'], ['QQQ'
       '<div class="field"><label for="autoSettings">Refresh automatically</label>' + autoSelect('autoSettings') + '<span class="hint">Runs while this page is open and visible, and as soon as it opens if the time has passed. Also refreshes once after each 4:00 PM close for closing prices.</span></div>' +
       '<label class="check"><input type="checkbox" data-feed="marketHoursOnly" data-fk="mho"' + (f.marketHoursOnly ? ' checked' : '') + '> Only during US market hours (9:30 to 4:00 New York time, weekdays)</label>' +
       '<label class="check"><input type="checkbox" data-set="tickerMarket" data-fk="tickerMarket"' + (st.tickerMarket ? ' checked' : '') + '> Track the market: Dow, S&amp;P 500 and Nasdaq-100 (through the DIA, SPY and QQQ funds) in the Overview ticker and on Stocks</label>' +
-      '<p class="hint" style="margin:0">Adds those three funds to each refresh, unless you already hold them.</p>' +
+      '<p class="hint" style="margin:0">Adds those two symbols to each refresh, unless you already hold them.</p>' +
       '<div class="actions">' + refreshBtn(true) + '</div></section>' +
       backupsCard() +
       historyCard() +
