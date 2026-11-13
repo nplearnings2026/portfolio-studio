@@ -683,8 +683,10 @@ var FEEDS = {
     }
   }
 };
-// Market reference symbols shown first in the Overview ticker (Settings › Live price feed can turn them off).
-var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
+// Market index funds: shown first in the Overview ticker and in Stocks › Performance (Settings › Live price feed can
+// turn them off). Free price feeds don't quote the indexes themselves, so each is tracked through the fund that follows
+// it; the fund's daily % change closely matches the index. Third value: the short name used on Stocks.
+var MARKET = [['DIA', 'Dow Jones', 'Dow'], ['SPY', 'S&P 500', 'S&P 500'], ['QQQ', 'Nasdaq-100', 'Nasdaq']];
 /*ENGINE_END*/
 
 (function () {
@@ -795,7 +797,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.11.07', APP_BUILD = 2026110701;
+  var APP_VERSION = '2026.11.13', APP_BUILD = 2026111302;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -1842,7 +1844,7 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<div class="stock-sum"><article class="stock-intro"><div><div class="eyebrow">Stocks overview</div><div class="si-metrics"><div><span>Positions</span><b class="si-count">' + state.stocks.length + '</b></div>' +
       '<div><span>Market value</span><b class="si-total">' + money2(t.stocks) + '</b></div></div></div>' +
       '<p>' + (unpriced.length ? 'Priced positions only. ' + esc(unpriced.map(function (r) { return r.ticker; }).join(', ')) + ' ' + (unpriced.length === 1 ? 'has' : 'have') + ' no market price and ' + (unpriced.length === 1 ? 'is' : 'are') + ' left out.' : 'Every position has a price.') + '</p></article>' +
-      '<article class="card keys"><div class="eyebrow">Performance</div><div class="key-grid">' + keyItems + '</div></article></div>' +
+      '<article class="card keys"><div class="eyebrow">Performance</div><div class="key-grid">' + keyItems + '</div>' + marketsRow() + '</article></div>' +
       '<section class="card panel" aria-labelledby="hTitle"><div class="panel-head"><div><h2 id="hTitle">Holdings</h2><p><span class="desk-only">Select a column heading to sort. Type a price and press Enter or Tab to save it.</span><span class="phone-only">' + phoneSum + '</span></p></div><span class="mono muted desk-only" style="font-size:11px">' + state.stocks.length + ' positions · USD</span></div>' +
       '<div class="toolbar st-toolbar"><p><span class="chip ' + s2.cls + ' desk-only" data-feed-chip>' + esc(s2.text) + '</span><span class="chip ' + s2.cls + ' phone-only" data-feed-short>' + esc(feedShort()) + '</span></p><label for="autoStocks"><span class="desk-only">Auto-refresh</span><span class="phone-only">Auto</span> ' + autoSelect('autoStocks') + '</label></div>' +
       typeSplit() +
@@ -2244,6 +2246,26 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
   /* Ticker tape under the net worth panel: market symbols first, then each auto-priced holding (once per ticker),
      with the latest price and the change from the previous close as of the last refresh. It scrolls slowly, pauses
      while hovered or focused, and is a still, swipeable row when the device asks for reduced motion. */
+  // Latest quote for a market fund: your own holding's price if you hold it, else the stored market quote.
+  function marketQuote(sym) {
+    var held = state.stocks.filter(function (r) { return !r.manual && priced(r) && String(r.symbol || r.ticker).toUpperCase() === sym; })[0];
+    var q = held ? { price: n(held.price), prevClose: held.prevClose, quoteTime: held.quoteTime } : state.market[sym];
+    return q && n(q.price) > 0 ? q : null;
+  }
+  /* Stocks › Performance: today's move for each market index next to your own stocks' move, as of the last refresh. */
+  function marketsRow() {
+    if (!state.settings.tickerMarket) return '';
+    var asOf = 0, cells = MARKET.map(function (m) {
+      var q = marketQuote(m[0]), d = q && n(q.prevClose) > 0 ? (n(q.price) - n(q.prevClose)) / n(q.prevClose) * 100 : null;
+      if (q) asOf = Math.max(asOf, n(q.quoteTime));
+      return '<span class="mk" title="' + esc(m[1]) + ', tracked through the ' + m[0] + ' fund' + (q ? ' (' + m[0] + ' ' + px(n(q.price)) + ')' : '') + '"><span>' + esc(m[2]) + '</span>' +
+        (d == null ? '<b class="muted">—</b>' : '<b class="' + (d < 0 ? 'neg' : 'pos') + '">' + (d < 0 ? '▼ ' : '▲ ') + sgnPct(d) + '</b>') + '<small>via ' + m[0] + '</small></span>';
+    });
+    var tot = 0, prevTot = 0;
+    state.stocks.forEach(function (r) { var d = r.manual ? null : dayOf(r); if (d) { tot += n(r.qty) * d.chg; prevTot += n(r.qty) * r.prevClose; } });
+    if (prevTot) cells.push('<span class="mk mk-you" title="Your auto-priced holdings, weighted by value"><span>Your stocks</span><b class="' + (tot < 0 ? 'neg' : 'pos') + '">' + (tot < 0 ? '▼ ' : '▲ ') + sgnPct(tot / prevTot * 100) + '</b></span>');
+    return '<div class="mk-row"><div class="mk-head"><span>Markets today</span>' + (asOf ? '<small>as of ' + esc(when(asOf)) + '</small>' : '<small>after a live refresh</small>') + '</div><div class="mk-grid">' + cells.join('') + '</div></div>';
+  }
   function tickerTape() {
     var items = [], seen = {};
     var item = function (sym, label, price, prev, href) {
@@ -2253,9 +2275,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
     };
     var asOf = 0;
     if (state.settings.tickerMarket) MARKET.forEach(function (m) {
-      var held = state.stocks.filter(function (r) { return !r.manual && priced(r) && String(r.symbol || r.ticker).toUpperCase() === m[0]; })[0];
-      var q = held ? { price: n(held.price), prevClose: held.prevClose, quoteTime: held.quoteTime } : state.market[m[0]];
-      if (!q || !(n(q.price) > 0)) return;
+      var q = marketQuote(m[0]);
+      if (!q) return;
       items.push(item(m[0], m[1], n(q.price), n(q.prevClose), '#/stocks')); asOf = Math.max(asOf, n(q.quoteTime));
     });
     var mine = state.stocks.filter(function (r) { return !r.manual && priced(r); }).sort(function (a, b) { return String(a.ticker).localeCompare(String(b.ticker)); });
@@ -3215,8 +3236,8 @@ var MARKET = [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq-100']];
       '<div id="feedTest"></div>' +
       '<div class="field"><label for="autoSettings">Refresh automatically</label>' + autoSelect('autoSettings') + '<span class="hint">Runs while this page is open and visible, and as soon as it opens if the time has passed. Also refreshes once after each 4:00 PM close for closing prices.</span></div>' +
       '<label class="check"><input type="checkbox" data-feed="marketHoursOnly" data-fk="mho"' + (f.marketHoursOnly ? ' checked' : '') + '> Only during US market hours (9:30 to 4:00 New York time, weekdays)</label>' +
-      '<label class="check"><input type="checkbox" data-set="tickerMarket" data-fk="tickerMarket"' + (st.tickerMarket ? ' checked' : '') + '> Show the S&amp;P 500 (SPY) and Nasdaq-100 (QQQ) in the Overview ticker</label>' +
-      '<p class="hint" style="margin:0">Adds those two symbols to each refresh, unless you already hold them.</p>' +
+      '<label class="check"><input type="checkbox" data-set="tickerMarket" data-fk="tickerMarket"' + (st.tickerMarket ? ' checked' : '') + '> Track the market: Dow, S&amp;P 500 and Nasdaq-100 (through the DIA, SPY and QQQ funds) in the Overview ticker and on Stocks</label>' +
+      '<p class="hint" style="margin:0">Adds those three funds to each refresh, unless you already hold them.</p>' +
       '<div class="actions">' + refreshBtn(true) + '</div></section>' +
       backupsCard() +
       historyCard() +
