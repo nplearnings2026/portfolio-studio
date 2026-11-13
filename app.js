@@ -797,7 +797,7 @@ var MARKET = [['DIA', 'Dow Jones', 'Dow'], ['SPY', 'S&P 500', 'S&P 500'], ['QQQ'
   /* ---------- storage ---------- */
   // Raise APP_BUILD with every published change. Saves record the build that wrote them, and a copy of the app
   // older than the data it finds stops saving and syncing until it is reloaded, so old code can't overwrite new data.
-  var APP_VERSION = '2026.11.13', APP_BUILD = 2026111304;
+  var APP_VERSION = '2026.11.13', APP_BUILD = 2026111306;
   var outdated = false;
   var state = load();
   var prefs = loadPrefs();
@@ -2255,17 +2255,24 @@ var MARKET = [['DIA', 'Dow Jones', 'Dow'], ['SPY', 'S&P 500', 'S&P 500'], ['QQQ'
   /* Stocks › Performance: today's move for each market index next to your own stocks' move, as of the last refresh. */
   function marketsRow() {
     if (!state.settings.tickerMarket) return '';
+    var num2 = function (v) { return Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    var sg = function (v) { return v < 0 ? '−' : '+'; };
+    var cell = function (name, short, title, value, chg, down, cls) {
+      return '<div class="mk' + (cls ? ' ' + cls : '') + '" title="' + esc(title) + '"><span class="mk-n">' + (short ? '<span class="desk-only">' + esc(name) + '</span><span class="phone-only">' + esc(short) + '</span>' : esc(name)) + '</span>' +
+        '<b class="mk-v">' + value + '</b>' +
+        (chg == null ? '<span class="mk-c muted">—</span>' : '<span class="mk-c ' + (down ? 'neg' : 'pos') + '">' + chg + '</span>') + '</div>';
+    };
     var asOf = 0, cells = MARKET.map(function (m) {
-      var q = marketQuote(m[0]), d = q && n(q.prevClose) > 0 ? (n(q.price) - n(q.prevClose)) / n(q.prevClose) * 100 : null;
+      var q = marketQuote(m[0]), c = q && n(q.prevClose) > 0 ? n(q.price) - n(q.prevClose) : null;
       if (q) asOf = Math.max(asOf, n(q.quoteTime));
-      return '<span class="mk" title="' + esc(m[1]) + ', tracked through the ' + m[0] + ' fund' + (q ? ' (' + m[0] + ' ' + px(n(q.price)) + ')' : '') + '"><span>' + esc(m[2]) + '</span>' +
-        (d == null ? '<b class="muted">—</b>' : '<b class="' + (d < 0 ? 'neg' : 'pos') + '">' + (d < 0 ? '▼ ' : '▲ ') + sgnPct(d) + '</b>') + '<small>' + (q ? px(n(q.price)) : '') +
-        (q && d != null ? '<span class="mk-ch">' + pxSigned(n(q.price) - n(q.prevClose)) + '</span>' : '') + '</small></span>';
+      var line = c == null ? null : '<span class="mk-pt">' + sg(c) + num2(c) + '</span> ' + sg(c) + num2(c / n(q.prevClose) * 100) + '%';
+      return cell(m[2], '', m[1] + ', tracked through the ' + m[0] + ' fund', q ? num2(n(q.price)) : '—', line, c < 0);
     });
-    var tot = 0, prevTot = 0;
+    var t = totals(state), tot = 0, prevTot = 0;
     state.stocks.forEach(function (r) { var d = r.manual ? null : dayOf(r); if (d) { tot += n(r.qty) * d.chg; prevTot += n(r.qty) * r.prevClose; } });
-    if (prevTot) cells.push('<span class="mk mk-you" title="Your auto-priced holdings, weighted by value"><span><span class="desk-only">Your stocks</span><span class="phone-only">Yours</span></span><b class="' + (tot < 0 ? 'neg' : 'pos') + '">' + (tot < 0 ? '▼ ' : '▲ ') + sgnPct(tot / prevTot * 100) + '</b><small>' + signed(tot) + ' today</small></span>');
-    return '<div class="mk-row"><div class="mk-head"><span>Markets today</span>' + (asOf ? '<small>as of ' + esc(when(asOf)) + '</small>' : '<small>after a live refresh</small>') + '</div><div class="mk-grid">' + cells.join('') + '</div><p class="mk-foot">Prices are of the DIA, SPY and QQQ funds that track each index.</p></div>';
+    if (prevTot) cells.push(cell('Your stocks', 'Yours', 'Your auto-priced holdings: value and today\'s change', money0(t.stocks),
+      '<span class="mk-pt">' + signed(tot) + '</span> ' + sg(tot) + num2(tot / prevTot * 100) + '%', tot < 0, 'mk-you'));
+    return '<div class="mk-row"><div class="mk-head"><span>Markets today</span>' + (asOf ? '<small>as of ' + esc(when(asOf)) + '</small>' : '<small>after a live refresh</small>') + '</div><div class="mk-grid">' + cells.join('') + '</div><p class="mk-foot">Values are the prices of the DIA, SPY and QQQ funds that track each index; the % change closely matches the index.</p></div>';
   }
   function tickerTape() {
     var items = [], seen = {};
